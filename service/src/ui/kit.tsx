@@ -2,19 +2,20 @@
 // 내보내는 이름과 props 타입은 바꾸지 않는다. 데이터·로직은 app/ 아래 페이지가 맡는다.
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { CrisisDialog } from "./CrisisDialog";
 
 // ───────── 공통 ─────────
 export function AppShell(props: { title: string; subtitle?: string; right?: ReactNode; children: ReactNode }) {
   return (
-    <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col bg-paper">
-      <header className="flex items-end justify-between px-5 pb-3 pt-6">
-        <div>
+    <div className="app-shell mx-auto flex min-h-dvh w-full max-w-md flex-col bg-paper">
+      <header className="app-header flex items-end justify-between gap-4 px-5 pb-5 pt-7">
+        <div className="min-w-0">
           <h1 className="font-display text-xl font-bold text-ink">{props.title}</h1>
           {props.subtitle && <p className="mt-1 text-sm text-sub">{props.subtitle}</p>}
         </div>
-        {props.right}
+        <div className="flex shrink-0 items-center gap-3"><span className="ai-orb ai-orb-header" aria-hidden="true" />{props.right}</div>
       </header>
-      <main className="flex flex-1 flex-col gap-4 px-5 pb-6">{props.children}</main>
+      <main className="flex flex-1 flex-col gap-4 px-5 pb-6 pt-1">{props.children}</main>
       <SafetyFooter />
     </div>
   );
@@ -23,7 +24,7 @@ export function AppShell(props: { title: string; subtitle?: string; right?: Reac
 // 모든 화면에 고정: 시연용 서비스이며 실제 위기라면 109
 export function SafetyFooter() {
   return (
-    <footer className="sticky bottom-0 border-t border-line bg-white/95 px-5 py-3 text-xs leading-relaxed text-sub backdrop-blur">
+    <footer className="sticky bottom-0 z-20 border-t border-line bg-white/95 px-5 py-3 text-xs leading-relaxed text-sub backdrop-blur">
       시연용 서비스입니다. 지금 위험하다고 느낀다면 <a className="font-semibold text-alert underline" href="tel:109">109</a>
       (24시간 자살예방상담)로 전화하세요.
     </footer>
@@ -33,7 +34,7 @@ export function SafetyFooter() {
 export function Card(props: { children: ReactNode; tone?: "plain" | "person" | "ai" }) {
   const tone =
     props.tone === "person" ? "bg-person-soft border-transparent" : props.tone === "ai" ? "bg-ai-soft border-transparent" : "bg-white border-line";
-  return <section className={`rounded-2xl border p-4 ${tone}`}>{props.children}</section>;
+  return <section className={`surface-card rounded-2xl border p-4 ${tone}`}>{props.children}</section>;
 }
 
 export function Label(props: { children: ReactNode }) {
@@ -41,9 +42,9 @@ export function Label(props: { children: ReactNode }) {
 }
 
 export function PrimaryButton(props: { children: ReactNode; name?: string; value?: string; tone?: "ink" | "person" }) {
-  const tone = props.tone === "person" ? "bg-person" : "bg-ink";
+  const tone = props.tone === "person" ? "bg-person text-ink" : "bg-ink text-white";
   return (
-    <button name={props.name} value={props.value} className={`w-full rounded-xl px-4 py-3 text-sm font-semibold text-white ${tone} focus-visible:outline-3 focus-visible:outline-person`}>
+    <button name={props.name} value={props.value} className={`w-full rounded-xl px-4 py-3 text-sm font-semibold ${tone} focus-visible:outline-3 focus-visible:outline-dusk`}>
       {props.children}
     </button>
   );
@@ -113,17 +114,18 @@ const STAGES = ["AI와 이야기하기", "선배의 글 읽기", "선배와 글 
 
 export function StageLadder(props: { stage: number }) {
   return (
-    <ol className="flex flex-col-reverse gap-1.5" aria-label="회복 단계">
+    <ol className="stage-ladder flex flex-col-reverse gap-1.5" aria-label="회복 단계">
       {STAGES.map((name, i) => (
         <li
           key={i}
           aria-current={i === props.stage ? "step" : undefined}
-          className={`flex items-center gap-3 rounded-xl border px-3 py-2 text-sm ${
-            i === props.stage ? "border-ink bg-ink text-white" : i < props.stage ? "border-line bg-white text-ink" : "border-line bg-white text-sub"
+          className={`stage-rung flex items-center gap-3 rounded-xl border px-3 py-2 text-sm ${
+            i === props.stage ? "stage-rung-current border-ink bg-ink text-white" : i < props.stage ? "border-line bg-white text-ink" : "border-line bg-white text-sub"
           }`}
         >
-          <span className="w-4 text-center font-bold">{i}</span>
-          {name}
+          <span className="w-4 shrink-0 text-center font-bold">{i}</span>
+          <span className="min-w-0 flex-1">{name}</span>
+          <span className={`ai-orb stage-orb stage-orb-${i}`} aria-hidden="true" />
         </li>
       ))}
     </ol>
@@ -183,7 +185,7 @@ export function Composer(props: { action: (fd: FormData) => Promise<void>; hidde
       {Object.entries(props.hidden ?? {}).map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
       <label className="sr-only" htmlFor="body">메시지</label>
       <input id="body" name="body" required maxLength={1000} placeholder={props.placeholder} autoComplete="off"
-        className="flex-1 rounded-xl border border-line bg-white px-3 py-3 text-sm" />
+        className="min-w-0 flex-1 rounded-xl border border-line bg-white px-3 py-3 text-sm" />
       <button className="rounded-xl bg-ink px-4 text-sm font-semibold text-white">보내기</button>
     </form>
   );
@@ -192,8 +194,8 @@ export function Composer(props: { action: (fd: FormData) => Promise<void>; hidde
 // 위험 표현이 감지되면 대화를 이어 가지 않고 사람에게 연결한다
 export function CrisisSheet(props: { closeHref: string }) {
   return (
-    <div role="dialog" aria-modal="true" aria-labelledby="crisis-title" className="fixed inset-0 z-50 flex items-end bg-night/50">
-      <div className="mx-auto w-full max-w-md rounded-t-3xl bg-white p-5">
+    <CrisisDialog closeHref={props.closeHref}>
+      <div className="mx-auto max-h-dvh w-full max-w-md overflow-y-auto rounded-t-3xl bg-white p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl">
         <h2 id="crisis-title" className="font-display text-xl text-ink">지금은 사람과 이야기해요</h2>
         <a href="tel:109" className="mt-4 flex items-center justify-between rounded-2xl bg-alert px-4 py-3 font-semibold text-white">
           <span>109 자살예방상담<span className="block text-xs font-normal opacity-90">24시간 · 무료 · 익명 가능</span></span>
@@ -208,7 +210,7 @@ export function CrisisSheet(props: { closeHref: string }) {
         </p>
         <Link href={props.closeHref} className="mt-3 block text-center text-sm text-sub underline">닫기</Link>
       </div>
-    </div>
+    </CrisisDialog>
   );
 }
 

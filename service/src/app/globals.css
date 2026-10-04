@@ -3,6 +3,9 @@
 /* 목업과 같은 색: 밤(AI) → 새벽(사람) */
 @theme {
   --color-night: #1e2340;
+  --color-dusk: #3b4a7a;
+  --color-haze: #9db0d6;
+  --color-dawn: #f3e3cf;
   --color-paper: #f7f8fb;
   --color-ink: #1b1f2e;
   --color-sub: #5e6680;
@@ -18,7 +21,68 @@
 }
 
 body {
-  background: var(--color-paper);
+  background: var(--color-night);
   color: var(--color-ink);
   font-family: var(--font-sans);
+}
+
+.app-shell {
+  position: relative;
+  isolation: isolate;
+  background: linear-gradient(180deg, #f3f0f5 0, var(--color-paper) 13rem);
+  box-shadow: 0 18px 70px #10142a42;
+}
+
+.app-header {
+  position: relative;
+  background: linear-gradient(115deg, #e8e8f4 0%, #edf0f7 47%, #f6e9db 100%);
+  border-bottom: 1px solid #e2e5ee;
+}
+
+.app-header::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+  background: linear-gradient(90deg, var(--color-night), var(--color-dusk) 35%, var(--color-haze) 68%, var(--color-dawn));
+}
+
+.app-header h1 { letter-spacing: -0.035em; }
+.app-header p { line-height: 1.5; }
+
+.ai-orb {
+  display: inline-block;
+  flex: none;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff 0%, #c4bffa 31%, var(--color-ai) 62%, #827bd4 100%);
+  box-shadow: 0 0 0 5px var(--color-ai-soft), 0 3px 11px #7770c74d;
+}
+
+.ai-orb-header { width: 27px; }
+.stage-orb-0 { width: 24px; }
+.stage-orb-1 { width: 20px; }
+.stage-orb-2 { width: 16px; }
+.stage-orb-3 { width: 12px; }
+.stage-orb-4 { width: 9px; }
+
+.surface-card {
+  box-shadow: 0 2px 12px #252c4a08;
+}
+
+.stage-rung { min-height: 45px; }
+.stage-rung-current {
+  border-color: var(--color-dusk);
+  background: linear-gradient(105deg, var(--color-night), var(--color-dusk));
+}
+.stage-rung-current .ai-orb { box-shadow: 0 0 0 4px #b9b4ef40; }
+
+button, a, input { transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease; }
+:where(button, a, input):focus-visible {
+  outline: 3px solid var(--color-dusk);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  button, a, input { transition: none; }
 }
