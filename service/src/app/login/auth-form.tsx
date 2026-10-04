@@ -16,7 +16,14 @@ export function AuthForm(props: {
       {props.fields.map((f) => (
         <label key={f.name} className="flex flex-col gap-1 text-sm">
           {f.label}
-          <input name={f.name} type={f.type} required className="rounded-xl border border-line bg-white px-3 py-3" />
+          <input
+            key={`${f.name}-${state?.error ?? ""}`}
+            name={f.name}
+            type={f.type}
+            required
+            defaultValue={f.type === "password" ? undefined : state?.values?.[f.name]}
+            className="rounded-xl border border-line bg-white px-3 py-3"
+          />
         </label>
       ))}
       {state?.error && <p role="alert" className="text-sm text-alert">{state.error}</p>}

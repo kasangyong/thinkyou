@@ -17,13 +17,17 @@ export default async function MentorThread({ params }: PageProps<"/mentor/[youth
 
   const [youth, messages] = await Promise.all([
     one<{ display_name: string }>(sql`select display_name from profiles where id = ${youthId}`),
-    rows<Msg>(sql`select id, sender_id, body, created_at from messages where youth_id = ${youthId} order by created_at, id`),
+    rows<Msg & { crisis: boolean }>(sql`
+      select m.id, m.sender_id, m.body, m.created_at,
+             exists (select 1 from crisis_events e where e.message_id = m.id) as crisis
+        from messages m where m.youth_id = ${youthId} order by m.created_at, m.id`),
   ]);
   const youthName = youth?.display_name ?? "청년";
 
   return (
     <AppShell title={`${youthName} 님과 주고받기`} subtitle="조언보다 내 경험 한 줄이 더 닿아요"
-      right={<Link href="/mentor" className="text-xs text-sub underline">목록</Link>}>
+      right={<Link href="/mentor" className="text-xs text-sub underline">목록</Link>}
+      dock={<Composer action={sendMessage} hidden={{ youthId }} placeholder="짧게 답장하기" />}>
       <AutoRefresh seconds={10} />
       <MessageList
         emptyText="먼저 짧은 글을 남겨 주세요."
@@ -33,9 +37,10 @@ export default async function MentorThread({ params }: PageProps<"/mentor/[youth
           senderName: m.sender_id === me.id ? me.display_name : youthName,
           body: m.body,
           time: kstTime(m.created_at),
+          // 선배가 혼자 감당하지 않도록, 위기 신호가 감지된 글에는 상담사 연계 사실을 알린다
+          note: m.crisis ? "위험 신호로 감지되어 담당 상담사에게 알렸어요. 답장은 평소처럼 짧게, 판단은 상담사에게 맡겨 주세요." : undefined,
         }))}
       />
-      <Composer action={sendMessage} hidden={{ youthId }} placeholder="짧게 답장하기" />
     </AppShell>
   );
 }

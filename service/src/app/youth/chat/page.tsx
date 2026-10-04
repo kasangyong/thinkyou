@@ -25,8 +25,9 @@ export default async function YouthChat({ searchParams }: PageProps<"/youth/chat
   return (
     <AppShell
       title={`${mentorName} 님과 주고받기`}
-      subtitle={(stage?.stage ?? 0) >= 2 ? "첫 양방향 대화를 나눴어요 · 2단계가 열렸어요" : "선배의 글에 한 줄만 답해도 돼요"}
+      subtitle={(stage?.stage ?? 0) >= 2 ? `지금 ${stage?.stage}단계 · 주고받은 대화가 쌓이고 있어요` : "선배의 글에 한 줄만 답해도 돼요"}
       right={<Link href="/youth" className="text-xs text-sub underline">홈</Link>}
+      dock={<Composer action={sendMessage} placeholder="한 줄만 적어도 괜찮아요" />}
     >
       <AutoRefresh seconds={10} />
       <MessageList
@@ -39,8 +40,7 @@ export default async function YouthChat({ searchParams }: PageProps<"/youth/chat
           time: kstTime(m.created_at),
         }))}
       />
-      <Composer action={sendMessage} placeholder="한 줄만 적어도 괜찮아요" />
-      {crisis === "1" && <CrisisSheet closeHref="/youth/chat" />}
+            {crisis === "1" && <CrisisSheet closeHref="/youth/chat" />}
     </AppShell>
   );
 }

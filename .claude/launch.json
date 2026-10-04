@@ -1,0 +1,6 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    { "name": "oneul-local", "runtimeExecutable": "npm", "runtimeArgs": ["--prefix", "service", "run", "dev:local"], "port": 3100 }
+  ]
+}

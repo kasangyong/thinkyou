@@ -94,8 +94,10 @@ create table if not exists stage_state (
   stage integer not null default 0 check (stage between 0 and 4),
   proposed_stage integer check (proposed_stage between 1 and 4),
   proposed_at timestamptz,
+  stage_since timestamptz not null default now(),   -- 지금 단계가 시작된 시각. 단계 제안은 이후 접촉만 센다
   updated_at timestamptz not null default now()
 );
+alter table stage_state add column if not exists stage_since timestamptz not null default now();
 
 -- ───────────────────────── 위기 대응 ─────────────────────────
 create table if not exists crisis_events (
@@ -141,9 +143,9 @@ begin
       values (new.youth_id, 'message_pair', new.id, new.created_at);
 
     -- 첫 양방향 대화가 생기면 2단계가 열린다
-    insert into stage_state(youth_id, stage) values (new.youth_id, 2)
+    insert into stage_state(youth_id, stage, stage_since) values (new.youth_id, 2, new.created_at)
       on conflict (youth_id) do update
-        set stage = greatest(stage_state.stage, 2), updated_at = now()
+        set stage = 2, stage_since = new.created_at, updated_at = now()
         where stage_state.stage < 2;
   end if;
   return new;
@@ -168,10 +170,12 @@ begin
     return st.proposed_stage;
   end if;
 
+  -- 지금 단계에 올라온 뒤의 접촉만 센다(수락하자마자 다음 단계가 또 제안되지 않도록)
   select count(*) into recent from contacts
-   where youth_id = p_youth and occurred_at >= now() - make_interval(days => half);
+   where youth_id = p_youth and occurred_at >= st.stage_since
+     and occurred_at >= now() - make_interval(days => half);
   select count(*) into earlier from contacts
-   where youth_id = p_youth
+   where youth_id = p_youth and occurred_at >= st.stage_since
      and occurred_at <  now() - make_interval(days => half)
      and occurred_at >= now() - make_interval(days => half * 2);
 
@@ -234,7 +238,7 @@ end $$;
 
 -- ───────────────────────── 시연용 데이터 ─────────────────────────
 -- p_mode = 'fresh'      : 1단계, 선배의 첫 글만 있는 상태(첫 양방향 대화 → 2단계 시연)
--- p_mode = 'four_weeks' : 2단계, 최근 2주간 주 3회씩 주고받은 상태(단계 제안 시연)
+-- p_mode = 'four_weeks' : 2단계, 최근 2주간 꾸준히 주고받은 상태(단계 제안 시연)
 create or replace function seed_youth_state(p_youth uuid, p_mode text) returns void
 language plpgsql as $$
 declare
@@ -253,14 +257,28 @@ begin
   delete from stage_state where youth_id = p_youth;
 
   if p_mode = 'four_weeks' then
-    insert into stage_state(youth_id, stage) values (p_youth, 2);
-    -- 최근 13일 동안 6쌍(주 3회 × 2주)
+    insert into stage_state(youth_id, stage, stage_since) values (p_youth, 2, now() - interval '14 days');
+    -- 최근 2주 동안 이틀 간격으로 주고받은 대화. 오래된 대화부터 순서대로 쌓인다.
     for i in 0..5 loop
-      t := now() - make_interval(days => 1 + i * 2, hours => 3);
+      t := now() - make_interval(days => 11 - i * 2, hours => 3);
       insert into messages(youth_id, sender_id, body, created_at)
-        values (p_youth, a.mentor_id, '오늘은 어떤 걸음을 했어요?', t);
+        values (p_youth, a.mentor_id, (array[
+          '저도 처음엔 커튼 여는 데 한참 걸렸어요. 오늘 하늘은 어땠어요?',
+          '어제 사진 잘 봤어요. 구름이 예뻤어요. 오늘은 물 한 잔 마셔 볼래요?',
+          '저는 요즘 아침에 창문 열고 5분 서 있는 게 루틴이에요. 해 볼 만했어요?',
+          '이번 주 세 번이나 답장해 줬네요. 저는 그게 정말 반가워요.',
+          '오늘 동네 편의점까지 걸어갔다 왔어요. 바람이 꽤 차더라고요.',
+          '혹시 다음 주에 다른 선배 한 명이랑 셋이서 짧게 이야기해 볼래요? 카메라는 안 켜도 돼요.'
+        ])[i + 1], t);
       insert into messages(youth_id, sender_id, body, created_at)
-        values (p_youth, p_youth, '창문 열고 사진 찍었어요', t + interval '2 hours');
+        values (p_youth, p_youth, (array[
+          '흐렸어요. 그래도 커튼은 열어 뒀어요',
+          '물 마셨어요. 생각보다 별거 아니었어요',
+          '3분 정도 서 있었어요. 밖이 생각보다 조용했어요',
+          '저도 답장 오는 게 좋아요',
+          '저는 아직 현관까지만 나가 봤어요',
+          '조금 떨리는데 들어만 있어도 되면 해 볼게요'
+        ])[i + 1], t + interval '2 hours');
     end loop;
   else
     insert into stage_state(youth_id, stage) values (p_youth, 1);

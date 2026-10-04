@@ -26,7 +26,7 @@ export default async function YouthHome() {
 
   return (
     <AppShell
-      title={`${me.display_name} 님, 좋은 아침이에요`}
+      title={`${me.display_name} 님, 오늘도 와 줬네요`}
       subtitle="오늘의 한 걸음만 하면 충분해요"
       right={<form action={logout}><SubmitButton className="text-xs text-sub underline">로그아웃</SubmitButton></form>}
     >

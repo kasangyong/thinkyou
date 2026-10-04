@@ -4,9 +4,11 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { CrisisDialog } from "./CrisisDialog";
 import { SubmitButton } from "./submit-button";
+import { ScrollToEnd } from "./scroll-to-end";
 
 // ───────── 공통 ─────────
-export function AppShell(props: { title: string; subtitle?: string; right?: ReactNode; children: ReactNode }) {
+// dock: 화면 아래에 붙는 입력창 등. 안전 안내와 한 덩어리로 붙어 서로 가리지 않는다.
+export function AppShell(props: { title: string; subtitle?: string; right?: ReactNode; children: ReactNode; dock?: ReactNode }) {
   return (
     <div className="app-shell mx-auto flex min-h-dvh w-full max-w-md flex-col bg-paper">
       <header className="app-header flex items-end justify-between gap-4 px-5 pb-5 pt-7">
@@ -17,7 +19,10 @@ export function AppShell(props: { title: string; subtitle?: string; right?: Reac
         <div className="flex shrink-0 items-center gap-3"><span className="ai-orb ai-orb-header" aria-hidden="true" />{props.right}</div>
       </header>
       <main className="flex flex-1 flex-col gap-4 px-5 pb-6 pt-1">{props.children}</main>
-      <SafetyFooter />
+      <div className="sticky bottom-0 z-20">
+        {props.dock && <div className="border-t border-line bg-paper/95 px-5 py-2 backdrop-blur">{props.dock}</div>}
+        <SafetyFooter />
+      </div>
     </div>
   );
 }
@@ -25,9 +30,8 @@ export function AppShell(props: { title: string; subtitle?: string; right?: Reac
 // 모든 화면에 고정: 시연용 서비스이며 실제 위기라면 109
 export function SafetyFooter() {
   return (
-    <footer className="sticky bottom-0 z-20 border-t border-line bg-white/95 px-5 py-3 text-xs leading-relaxed text-sub backdrop-blur">
-      시연용 서비스입니다. 지금 위험하다고 느낀다면 <a className="font-semibold text-alert underline" href="tel:109">109</a>
-      (24시간 자살예방상담)로 전화하세요.
+    <footer className="border-t border-line bg-white/95 px-5 py-2.5 text-xs leading-relaxed text-sub backdrop-blur">
+      시연용 서비스예요. 지금 위험하다면 <a className="font-semibold text-alert underline" href="tel:109">109</a>(24시간 자살예방상담)에 전화하세요.
     </footer>
   );
 }
@@ -164,7 +168,7 @@ export function StageProposal(props: { proposed: number; action: (fd: FormData) 
 }
 
 // ───────── 대화 ─────────
-export type ChatMessage = { id: string; mine: boolean; senderName: string; body: string; time: string };
+export type ChatMessage = { id: string; mine: boolean; senderName: string; body: string; time: string; note?: string };
 
 export function MessageList(props: { messages: ChatMessage[]; emptyText: string }) {
   if (props.messages.length === 0) return <p className="py-8 text-center text-sm text-sub">{props.emptyText}</p>;
@@ -175,15 +179,17 @@ export function MessageList(props: { messages: ChatMessage[]; emptyText: string 
           {!m.mine && <p className="mb-0.5 text-xs font-semibold">{m.senderName}</p>}
           <p className="whitespace-pre-wrap">{m.body}</p>
           <p className={`mt-1 text-[11px] ${m.mine ? "text-white/60" : "text-sub"}`}>{m.time}</p>
+          {m.note && <p className="mt-2 rounded-lg bg-alert-soft px-2 py-1.5 text-xs font-semibold text-alert">{m.note}</p>}
         </li>
       ))}
+      <ScrollToEnd count={props.messages.length} />
     </ul>
   );
 }
 
 export function Composer(props: { action: (fd: FormData) => Promise<void>; hidden?: Record<string, string>; placeholder: string }) {
   return (
-    <form action={props.action} className="sticky bottom-14 flex gap-2 bg-paper pt-2">
+    <form action={props.action} className="flex gap-2">
       {Object.entries(props.hidden ?? {}).map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
       <label className="sr-only" htmlFor="body">메시지</label>
       <input id="body" name="body" required maxLength={1000} placeholder={props.placeholder} autoComplete="off"
@@ -225,6 +231,7 @@ export type AlertView = {
   severity: "high" | "urgent";
   createdAt: string;
   acked: boolean;
+  handledElsewhere?: boolean;
 };
 
 const LEVEL_KO = { primary: "담당 상담사", backup: "예비 담당자(재전달)", emergency: "24시간 위기대응팀(시뮬레이션)" };
@@ -232,7 +239,7 @@ const LEVEL_KO = { primary: "담당 상담사", backup: "예비 담당자(재전
 export function AlertItem(props: { alert: AlertView; ackAction: (fd: FormData) => Promise<void> }) {
   const a = props.alert;
   return (
-    <Card tone={a.acked ? "plain" : "person"}>
+    <Card tone={a.acked || a.handledElsewhere ? "plain" : "person"}>
       <div className="flex items-center justify-between text-xs">
         <span className={`rounded-full px-2 py-0.5 font-semibold ${a.severity === "urgent" ? "bg-alert text-white" : "bg-alert-soft text-alert"}`}>
           {a.severity === "urgent" ? "긴급" : "주의"}
@@ -243,6 +250,8 @@ export function AlertItem(props: { alert: AlertView; ackAction: (fd: FormData) =
       <p className="mt-1 text-sm text-ink">“{a.excerpt}”</p>
       {a.acked ? (
         <p className="mt-2 text-xs text-sub">확인함</p>
+      ) : a.handledElsewhere ? (
+        <p className="mt-2 text-xs text-sub">다른 담당자가 확인했어요</p>
       ) : (
         <form action={props.ackAction} className="mt-3">
           <input type="hidden" name="alertId" value={a.id} />

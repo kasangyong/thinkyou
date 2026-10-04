@@ -18,6 +18,7 @@ type AlertRow = {
   display_name: string;
   excerpt: string;
   severity: AlertView["severity"];
+  handled_elsewhere: boolean;
 };
 
 export default async function CarePage() {
@@ -29,7 +30,9 @@ export default async function CarePage() {
   await sql`select escalate_alerts()`;
 
   const alerts = await rows<AlertRow>(sql`
-    select al.id, al.level, al.acked_at, al.created_at, p.display_name, e.excerpt, e.severity
+    select al.id, al.level, al.acked_at, al.created_at, p.display_name, e.excerpt, e.severity,
+           exists (select 1 from alerts x where x.crisis_event_id = al.crisis_event_id
+                     and x.id <> al.id and x.acked_at is not null) as handled_elsewhere
       from alerts al
       join crisis_events e on e.id = al.crisis_event_id
       join profiles p on p.id = al.youth_id
@@ -43,6 +46,7 @@ export default async function CarePage() {
     severity: a.severity,
     createdAt: kstTime(a.created_at),
     acked: !!a.acked_at,
+    handledElsewhere: a.handled_elsewhere,
   }));
 
   let youths: Awaited<ReturnType<typeof loadYouthRows>> = [];
@@ -50,7 +54,7 @@ export default async function CarePage() {
     const mine = await rows<{ youth_id: string }>(sql`select youth_id from assignments where counselor_id = ${me.id}`);
     youths = await loadYouthRows(mine.map((r) => r.youth_id));
   }
-  const open = views.filter((v) => !v.acked).length;
+  const open = views.filter((v) => !v.acked && !v.handledElsewhere).length;
 
   return (
     <AppShell
@@ -76,7 +80,7 @@ export default async function CarePage() {
               <form action={resetDemo}><input type="hidden" name="mode" value="fresh" />
                 <SubmitButton className="w-full rounded-xl border border-line bg-white py-2 text-sm">처음 상태 (1단계, 선배 첫 글)</SubmitButton></form>
               <form action={resetDemo}><input type="hidden" name="mode" value="four_weeks" />
-                <SubmitButton className="w-full rounded-xl border border-line bg-white py-2 text-sm">4주 뒤 상태 (2단계, 2주간 주 3회)</SubmitButton></form>
+                <SubmitButton className="w-full rounded-xl border border-line bg-white py-2 text-sm">4주 뒤 상태 (2단계, 2주간 꾸준히 주고받음)</SubmitButton></form>
             </div>
           </Card>
         </>
