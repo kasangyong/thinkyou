@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { one, rows, sql } from "@/lib/db";
 import { canUseThread, endSession, hashPassword, requireRole, startSession, verifyPassword } from "@/lib/auth";
 import { detectCrisis } from "@/lib/crisis";
+import { ensureDemoAccounts } from "@/lib/demo";
 import { kstDay } from "@/lib/format";
 import { suggestStep, type Mood, type StepSize } from "@/lib/gemini";
 
@@ -14,6 +15,7 @@ export type FormState = { error?: string } | undefined;
 export async function login(_: FormState, formData: FormData): Promise<FormState> {
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const password = String(formData.get("password") ?? "");
+  await ensureDemoAccounts();
   const user = await one<{ id: string; password_hash: string }>(
     sql`select id, password_hash from profiles where email = ${email}`,
   );
