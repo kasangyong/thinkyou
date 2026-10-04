@@ -22,7 +22,7 @@ export default function LoginPage() {
         <Label>시연용 데모 계정</Label>
         <ul className="mt-2 flex flex-col gap-1 text-sm">
           {DEMO.map(([role, email]) => (
-            <li key={email} className="flex justify-between gap-2"><span className="text-sub">{role}</span><span className="font-mono text-xs">{email}</span></li>
+            <li key={email} className="flex flex-col"><span className="text-xs text-sub">{role}</span><span className="font-mono text-sm">{email}</span></li>
           ))}
         </ul>
         <p className="mt-2 text-xs text-sub">숫자를 2, 3으로 바꾸면 다른 세트입니다. 비밀번호는 제출 자료에 적어 두었습니다.</p>
