@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
-import { createClient, getMe } from "@/lib/supabase/server";
+import { getMe } from "@/lib/auth";
+import { rows, sql } from "@/lib/db";
 import { AppShell, Card, Label, YouthTable } from "@/ui/kit";
 import { AutoRefresh } from "@/ui/auto-refresh";
 import { logout, resetDemo } from "../actions";
@@ -8,9 +9,8 @@ import { loadYouthRows } from "../care/rows";
 export default async function MentorHome() {
   const me = await getMe();
   if (!me || me.role !== "mentor") redirect("/");
-  const supabase = await createClient();
-  const { data: rows } = await supabase.from("assignments").select("youth_id").eq("mentor_id", me.id);
-  const youths = await loadYouthRows((rows ?? []).map((r) => r.youth_id), (id) => `/mentor/${id}`);
+  const mine = await rows<{ youth_id: string }>(sql`select youth_id from assignments where mentor_id = ${me.id}`);
+  const youths = await loadYouthRows(mine.map((r) => r.youth_id), (id) => `/mentor/${id}`);
 
   return (
     <AppShell

@@ -47,6 +47,8 @@
 
 ## 결정 2. 데이터베이스·인증·실시간
 
+> 2026-10-04 변경: 사용자의 Supabase 무료 플랜 한도 때문에 **Neon Postgres**로 바꿨다. 로그인은 자체 구현(scrypt 비밀번호 해시 + HMAC 서명 세션 쿠키), 권한 확인은 RLS 대신 서버 코드(`src/lib/auth.ts`의 `requireRole`·`canUseThread`, 각 쿼리의 담당 관계 조건)에서 한다. 위기 재전달은 pg_cron 없이 돌봄 대시보드 폴링 시 `escalate_alerts()`를 호출한다. 스키마는 `service/db/schema.sql`.
+
 | 옵션 | 장점 | 단점 |
 |---|---|---|
 | **A. Supabase (Postgres + Auth + Realtime + RLS + pg_cron)** | 인증·DB·실시간 메시지·예약 작업이 한 곳. RLS로 "선배는 담당 청년의 메시지만" 같은 권한을 DB에서 강제 | Supabase 프로젝트·키 필요, RLS 정책 작성 시간 |

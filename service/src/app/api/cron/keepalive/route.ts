@@ -1,10 +1,10 @@
-import { createServiceClient } from "@/lib/supabase/server";
+import { sql } from "@/lib/db";
 
-// Supabase 무료 프로젝트는 7일 동안 요청이 없으면 일시정지된다. Vercel Cron이 하루 한 번 깨운다.
+// Neon은 쉬고 있다가 첫 요청에 깨어나 느릴 수 있다. 심사 기간에 하루 한 번 미리 깨워 둔다.
 export async function GET(request: Request) {
   if (request.headers.get("authorization") !== `Bearer ${process.env.CRON_SECRET}`) {
     return new Response("unauthorized", { status: 401 });
   }
-  const { error } = await createServiceClient().from("app_config").select("key").limit(1);
-  return Response.json({ ok: !error });
+  await sql`select 1`;
+  return Response.json({ ok: true });
 }

@@ -1,28 +1,27 @@
 import { redirect } from "next/navigation";
-import { createClient, getMe } from "@/lib/supabase/server";
-import { daysAgoIso, kstDay, splitWeeks } from "@/lib/format";
+import { getMe } from "@/lib/auth";
+import { one, rows, sql } from "@/lib/db";
+import { kstDay, splitWeeks } from "@/lib/format";
 import { AppShell, Card, ContactWeeks, Label, MoodPicker, NavLink, StageLadder, StageProposal, StepCard, type MoodValue } from "@/ui/kit";
 import { checkIn, completeStep, logout, respondStage, smallerStep } from "../actions";
 
 export default async function YouthHome() {
   const me = await getMe();
   if (!me || me.role !== "youth") redirect("/");
-  const supabase = await createClient();
-
   // 접속할 때마다 단계 제안 조건을 확인한다(2주 연속 주 3회 → 다음 단계 제안)
-  await supabase.rpc("compute_stage_proposal", { p_youth: me.id });
+  await sql`select compute_stage_proposal(${me.id})`;
 
-  const since = daysAgoIso(14);
-  const [{ data: checkin }, { data: step }, { data: stage }, { data: contacts }, { count: reactionCount }, { data: target }] =
-    await Promise.all([
-      supabase.from("checkins").select("mood").eq("youth_id", me.id).eq("day", kstDay()).maybeSingle(),
-      supabase.from("daily_steps").select("text, done_at").eq("youth_id", me.id).eq("day", kstDay()).maybeSingle(),
-      supabase.from("stage_state").select("stage, proposed_stage").eq("youth_id", me.id).maybeSingle(),
-      supabase.from("contacts").select("occurred_at").eq("youth_id", me.id).gte("occurred_at", since),
-      supabase.from("reactions").select("id", { count: "exact", head: true }).eq("youth_id", me.id).gte("created_at", since),
-      supabase.from("app_config").select("value").eq("key", "weekly_contact_target").single(),
-    ]);
-  const weeks = splitWeeks((contacts ?? []).map((c) => c.occurred_at));
+  const today = kstDay();
+  const [checkin, step, stage, contacts, reaction, target] = await Promise.all([
+    one<{ mood: string }>(sql`select mood from checkins where youth_id = ${me.id} and day = ${today}`),
+    one<{ text: string; done_at: string | null }>(sql`select text, done_at from daily_steps where youth_id = ${me.id} and day = ${today}`),
+    one<{ stage: number; proposed_stage: number | null }>(sql`select stage, proposed_stage from stage_state where youth_id = ${me.id}`),
+    rows<{ occurred_at: string }>(sql`select occurred_at from contacts where youth_id = ${me.id} and occurred_at >= now() - interval '14 days'`),
+    one<{ n: number }>(sql`select count(*)::int as n from reactions where youth_id = ${me.id} and created_at >= now() - interval '14 days'`),
+    one<{ value: number }>(sql`select value from app_config where key = 'weekly_contact_target'`),
+  ]);
+  const weeks = splitWeeks(contacts.map((c) => new Date(c.occurred_at).toISOString()));
+  const reactionCount = reaction?.n ?? 0;
 
   return (
     <AppShell

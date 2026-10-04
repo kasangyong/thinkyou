@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
-import { createClient, getMe } from "@/lib/supabase/server";
+import { getMe } from "@/lib/auth";
+import { rows, sql } from "@/lib/db";
 import { kstTime } from "@/lib/format";
 import { AlertItem, AppShell, Card, Label, YouthTable, type AlertView } from "@/ui/kit";
 import { AutoRefresh } from "@/ui/auto-refresh";
@@ -8,44 +9,45 @@ import { loadYouthRows } from "./rows";
 
 const TITLE = { counselor: "담당 상담사", backup: "예비 담당자", crisis_team: "24시간 위기대응팀 (시뮬레이션)" } as const;
 
+type AlertRow = {
+  id: string;
+  level: AlertView["level"];
+  acked_at: string | null;
+  created_at: string;
+  display_name: string;
+  excerpt: string;
+  severity: AlertView["severity"];
+};
+
 export default async function CarePage() {
   const me = await getMe();
   if (!me || !(me.role in TITLE)) redirect("/");
   const role = me.role as keyof typeof TITLE;
-  const supabase = await createClient();
 
-  // pg_cron이 없을 때를 대비해, 화면을 볼 때마다 재전달 조건도 확인한다
-  await supabase.rpc("escalate_alerts");
+  // 화면을 볼 때마다(10초 폴링) 확인되지 않은 알림을 다음 담당자에게 넘긴다
+  await sql`select escalate_alerts()`;
 
-  const { data: alerts } = await supabase
-    .from("alerts")
-    .select("id, level, acked_at, created_at, youth_id, crisis_event_id")
-    .eq("recipient_id", me.id)
-    .order("created_at", { ascending: false })
-    .limit(30);
-  const eventIds = [...new Set((alerts ?? []).map((a) => a.crisis_event_id))];
-  const youthIds = [...new Set((alerts ?? []).map((a) => a.youth_id))];
-  const [{ data: events }, { data: names }] = await Promise.all([
-    eventIds.length ? supabase.from("crisis_events").select("id, excerpt, severity").in("id", eventIds) : Promise.resolve({ data: [] }),
-    youthIds.length ? supabase.from("profiles").select("id, display_name").in("id", youthIds) : Promise.resolve({ data: [] }),
-  ]);
-  const views: AlertView[] = (alerts ?? []).map((a) => {
-    const ev = events?.find((e) => e.id === a.crisis_event_id);
-    return {
-      id: a.id,
-      level: a.level,
-      youthName: names?.find((n) => n.id === a.youth_id)?.display_name ?? "청년",
-      excerpt: ev?.excerpt ?? "",
-      severity: ev?.severity ?? "high",
-      createdAt: kstTime(a.created_at),
-      acked: !!a.acked_at,
-    };
-  });
+  const alerts = await rows<AlertRow>(sql`
+    select al.id, al.level, al.acked_at, al.created_at, p.display_name, e.excerpt, e.severity
+      from alerts al
+      join crisis_events e on e.id = al.crisis_event_id
+      join profiles p on p.id = al.youth_id
+     where al.recipient_id = ${me.id}
+     order by al.created_at desc limit 30`);
+  const views: AlertView[] = alerts.map((a) => ({
+    id: a.id,
+    level: a.level,
+    youthName: a.display_name,
+    excerpt: a.excerpt,
+    severity: a.severity,
+    createdAt: kstTime(a.created_at),
+    acked: !!a.acked_at,
+  }));
 
   let youths: Awaited<ReturnType<typeof loadYouthRows>> = [];
   if (role === "counselor") {
-    const { data: rows } = await supabase.from("assignments").select("youth_id").eq("counselor_id", me.id);
-    youths = await loadYouthRows((rows ?? []).map((r) => r.youth_id));
+    const mine = await rows<{ youth_id: string }>(sql`select youth_id from assignments where counselor_id = ${me.id}`);
+    youths = await loadYouthRows(mine.map((r) => r.youth_id));
   }
   const open = views.filter((v) => !v.acked).length;
 

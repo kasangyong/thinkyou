@@ -1,22 +1,24 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { createClient, getMe } from "@/lib/supabase/server";
+import { getMe } from "@/lib/auth";
+import { one, rows, sql } from "@/lib/db";
 import { kstTime } from "@/lib/format";
 import { AppShell, Composer, CrisisSheet, MessageList } from "@/ui/kit";
 import { AutoRefresh } from "@/ui/auto-refresh";
 import { sendMessage } from "../../actions";
 
+type Msg = { id: string; sender_id: string; body: string; created_at: string };
+
 export default async function YouthChat({ searchParams }: PageProps<"/youth/chat">) {
   const me = await getMe();
   if (!me || me.role !== "youth") redirect("/");
   const { crisis } = await searchParams;
-  const supabase = await createClient();
 
-  const { data: assignment } = await supabase.from("assignments").select("mentor_id").eq("youth_id", me.id).single();
-  const [{ data: mentor }, { data: messages }, { data: stage }] = await Promise.all([
-    supabase.from("profiles").select("display_name").eq("id", assignment?.mentor_id ?? "").maybeSingle(),
-    supabase.from("messages").select("id, sender_id, body, created_at").eq("youth_id", me.id).order("created_at"),
-    supabase.from("stage_state").select("stage").eq("youth_id", me.id).maybeSingle(),
+  const [mentor, messages, stage] = await Promise.all([
+    one<{ display_name: string }>(sql`
+      select p.display_name from assignments a join profiles p on p.id = a.mentor_id where a.youth_id = ${me.id}`),
+    rows<Msg>(sql`select id, sender_id, body, created_at from messages where youth_id = ${me.id} order by created_at, id`),
+    one<{ stage: number }>(sql`select stage from stage_state where youth_id = ${me.id}`),
   ]);
   const mentorName = mentor?.display_name ?? "선배";
 
@@ -29,7 +31,7 @@ export default async function YouthChat({ searchParams }: PageProps<"/youth/chat
       <AutoRefresh seconds={10} />
       <MessageList
         emptyText="아직 주고받은 글이 없어요."
-        messages={(messages ?? []).map((m) => ({
+        messages={messages.map((m) => ({
           id: m.id,
           mine: m.sender_id === me.id,
           senderName: m.sender_id === me.id ? me.display_name : mentorName,

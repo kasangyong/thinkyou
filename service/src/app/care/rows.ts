@@ -1,26 +1,23 @@
 import "server-only";
-import { createClient } from "@/lib/supabase/server";
-import { daysAgoIso } from "@/lib/format";
+import { rows, sql } from "@/lib/db";
 import type { YouthRow } from "@/ui/kit";
 
+// 호출하는 쪽에서 이미 담당 관계로 걸러진 youthIds만 넘긴다.
 export async function loadYouthRows(youthIds: string[], href?: (id: string) => string): Promise<YouthRow[]> {
   if (youthIds.length === 0) return [];
-  const supabase = await createClient();
-  const since = daysAgoIso(14);
-  const [{ data: profiles }, { data: stages }, { data: contacts }] = await Promise.all([
-    supabase.from("profiles").select("id, display_name").in("id", youthIds),
-    supabase.from("stage_state").select("youth_id, stage, proposed_stage").in("youth_id", youthIds),
-    supabase.from("contacts").select("youth_id").in("youth_id", youthIds).gte("occurred_at", since),
-  ]);
-  return youthIds.map((id) => {
-    const st = stages?.find((s) => s.youth_id === id);
-    return {
-      id,
-      name: profiles?.find((p) => p.id === id)?.display_name ?? "청년",
-      stage: st?.stage ?? 0,
-      proposed: st?.proposed_stage ?? null,
-      contacts14d: contacts?.filter((c) => c.youth_id === id).length ?? 0,
-      href: href?.(id),
-    };
-  });
+  const data = await rows<{ id: string; display_name: string; stage: number | null; proposed_stage: number | null; contacts14d: number }>(sql`
+    select p.id, p.display_name, s.stage, s.proposed_stage,
+           (select count(*)::int from contacts c
+             where c.youth_id = p.id and c.occurred_at >= now() - interval '14 days') as contacts14d
+      from profiles p left join stage_state s on s.youth_id = p.id
+     where p.id = any(${youthIds}::uuid[])
+     order by p.created_at`);
+  return data.map((r) => ({
+    id: r.id,
+    name: r.display_name,
+    stage: r.stage ?? 0,
+    proposed: r.proposed_stage,
+    contacts14d: r.contacts14d,
+    href: href?.(r.id),
+  }));
 }

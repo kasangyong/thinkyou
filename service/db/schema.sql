@@ -1,7 +1,8 @@
--- 오늘한걸음 MVP 스키마
--- Supabase SQL Editor에서 한 번 실행한다. 여러 번 실행해도 안전하도록 작성했다.
+-- 오늘한걸음 MVP 스키마 (Neon Postgres)
+-- Neon SQL Editor에서 한 번 실행한다. 여러 번 실행해도 안전하다.
+-- 권한 확인은 앱 서버(src/lib/auth.ts, actions)에서 한다. DB에는 앱 서버만 접속한다.
 
-create extension if not exists pgcrypto;
+-- gen_random_uuid()는 Postgres 13+ 기본 제공이라 확장이 필요 없다.
 
 -- ───────────────────────── 설정 ─────────────────────────
 create table if not exists app_config (
@@ -20,11 +21,12 @@ language sql stable as $$ select value from app_config where key = p_key $$;
 
 -- ───────────────────────── 사용자 ─────────────────────────
 create table if not exists profiles (
-  id uuid primary key references auth.users(id) on delete cascade,
+  id uuid primary key default gen_random_uuid(),
+  email text not null unique,
+  password_hash text not null,
   role text not null check (role in ('youth','mentor','counselor','backup','crisis_team')),
   display_name text not null,
   demo_set integer not null default 0,   -- 0 = 모든 세트 공용(예비 담당, 위기대응팀)
-  consent_reconnect boolean not null default false,
   created_at timestamptz not null default now()
 );
 
@@ -40,7 +42,7 @@ create table if not exists assignments (
 create table if not exists checkins (
   id uuid primary key default gen_random_uuid(),
   youth_id uuid not null references profiles(id) on delete cascade,
-  day date not null default current_date,
+  day date not null,
   mood text not null check (mood in ('hard','ok','good')),
   created_at timestamptz not null default now(),
   unique (youth_id, day)
@@ -49,7 +51,7 @@ create table if not exists checkins (
 create table if not exists daily_steps (
   id uuid primary key default gen_random_uuid(),
   youth_id uuid not null references profiles(id) on delete cascade,
-  day date not null default current_date,
+  day date not null,
   text text not null,
   size text not null default 'normal' check (size in ('normal','small')),
   done_at timestamptz,
@@ -116,102 +118,10 @@ create table if not exists alerts (
   unique (crisis_event_id, level)
 );
 
--- ───────────────────────── 권한 확인 함수 ─────────────────────────
--- RLS 정책끼리 서로 참조하면 무한 재귀가 나므로, 확인은 security definer 함수로만 한다.
-create or replace function my_role() returns text
-language sql stable security definer set search_path = public as $$
-  select role from profiles where id = auth.uid()
-$$;
-
-create or replace function my_demo_set() returns integer
-language sql stable security definer set search_path = public as $$
-  select demo_set from profiles where id = auth.uid()
-$$;
-
--- 내가 이 청년 본인이거나 담당자인가
-create or replace function is_my_youth(p_youth uuid) returns boolean
-language sql stable security definer set search_path = public as $$
-  select p_youth = auth.uid() or exists (
-    select 1 from assignments a
-    where a.youth_id = p_youth
-      and auth.uid() in (a.mentor_id, a.counselor_id, a.backup_id, a.crisis_team_id)
-  )
-$$;
-
--- 메시지는 청년 본인과 담당 선배만 본다(상담사는 위기 알림으로만 본다)
-create or replace function is_my_thread(p_youth uuid) returns boolean
-language sql stable security definer set search_path = public as $$
-  select p_youth = auth.uid() or exists (
-    select 1 from assignments a where a.youth_id = p_youth and a.mentor_id = auth.uid()
-  )
-$$;
-
--- ───────────────────────── RLS ─────────────────────────
-alter table app_config enable row level security;
-alter table profiles enable row level security;
-alter table assignments enable row level security;
-alter table checkins enable row level security;
-alter table daily_steps enable row level security;
-alter table messages enable row level security;
-alter table reactions enable row level security;
-alter table contacts enable row level security;
-alter table stage_state enable row level security;
-alter table crisis_events enable row level security;
-alter table alerts enable row level security;
-
-drop policy if exists cfg_read on app_config;
-create policy cfg_read on app_config for select to authenticated using (true);
-
-drop policy if exists profiles_read on profiles;
-create policy profiles_read on profiles for select to authenticated
-  using (id = auth.uid() or my_demo_set() = 0 or demo_set in (0, my_demo_set()));
-
-drop policy if exists profiles_update_self on profiles;
-
-drop policy if exists assignments_read on assignments;
-create policy assignments_read on assignments for select to authenticated
-  using (is_my_youth(youth_id));
-
-drop policy if exists checkins_self on checkins;
-create policy checkins_self on checkins for all to authenticated
-  using (youth_id = auth.uid()) with check (youth_id = auth.uid());
-
-drop policy if exists steps_self on daily_steps;
-create policy steps_self on daily_steps for all to authenticated
-  using (youth_id = auth.uid()) with check (youth_id = auth.uid());
-
-drop policy if exists messages_read on messages;
-create policy messages_read on messages for select to authenticated
-  using (is_my_thread(youth_id));
-
-drop policy if exists messages_insert on messages;
-create policy messages_insert on messages for insert to authenticated
-  with check (sender_id = auth.uid() and is_my_thread(youth_id));
-
-drop policy if exists reactions_self on reactions;
-create policy reactions_self on reactions for all to authenticated
-  using (youth_id = auth.uid()) with check (youth_id = auth.uid());
-
-drop policy if exists contacts_read on contacts;
-create policy contacts_read on contacts for select to authenticated
-  using (is_my_youth(youth_id));
-
-drop policy if exists stage_read on stage_state;
-create policy stage_read on stage_state for select to authenticated
-  using (is_my_youth(youth_id));
-
-drop policy if exists crisis_read on crisis_events;
-create policy crisis_read on crisis_events for select to authenticated
-  using (exists (select 1 from alerts al where al.crisis_event_id = crisis_events.id and al.recipient_id = auth.uid()));
-
-drop policy if exists alerts_read on alerts;
-create policy alerts_read on alerts for select to authenticated
-  using (recipient_id = auth.uid());
-
 -- ───────────────────────── 양방향 접촉 판정 ─────────────────────────
 -- 직전 메시지의 발신자가 상대방이고 응답 인정 시간 안이면 1쌍. 연속 메시지·이모지는 쌍이 아니다.
 create or replace function on_message_insert() returns trigger
-language plpgsql security definer set search_path = public as $$
+language plpgsql as $$
 declare
   prev messages%rowtype;
 begin
@@ -246,14 +156,13 @@ create trigger trg_message_insert after insert on messages
 -- ───────────────────────── 단계 제안·수락 ─────────────────────────
 -- 2단계부터: 최근 2주 각 주에 양방향 접촉이 목표 이상이면 다음 단계를 제안한다.
 create or replace function compute_stage_proposal(p_youth uuid) returns integer
-language plpgsql security definer set search_path = public as $$
+language plpgsql as $$
 declare
   st stage_state%rowtype;
   half integer := cfg('stage_window_days') / 2;
   target integer := cfg('weekly_contact_target');
   recent integer; earlier integer;
 begin
-  if not is_my_youth(p_youth) then raise exception 'not allowed'; end if;
   select * into st from stage_state where youth_id = p_youth;
   if not found or st.stage < 2 or st.stage >= 4 or st.proposed_stage is not null then
     return st.proposed_stage;
@@ -274,50 +183,32 @@ begin
   return null;
 end $$;
 
--- 단계를 올릴지는 청년 본인이 정한다
-create or replace function respond_stage_proposal(p_accept boolean) returns void
-language plpgsql security definer set search_path = public as $$
-begin
-  if my_role() <> 'youth' then raise exception 'youth only'; end if;
-  update stage_state
-     set stage = case when p_accept then proposed_stage else stage end,
-         proposed_stage = null, proposed_at = null, updated_at = now()
-   where youth_id = auth.uid() and proposed_stage is not null;
-end $$;
-
 -- ───────────────────────── 위기 알림·재전달 ─────────────────────────
-create or replace function raise_crisis(p_message uuid, p_severity text, p_excerpt text)
+create or replace function raise_crisis(p_youth uuid, p_message uuid, p_severity text, p_excerpt text)
 returns uuid
-language plpgsql security definer set search_path = public as $$
+language plpgsql as $$
 declare
   a assignments%rowtype;
   ev uuid;
 begin
-  if my_role() <> 'youth' then raise exception 'youth only'; end if;
-  select * into a from assignments where youth_id = auth.uid();
+  select * into a from assignments where youth_id = p_youth;
   insert into crisis_events(youth_id, message_id, severity, excerpt)
-    values (auth.uid(), p_message, p_severity, left(p_excerpt, 200))
+    values (p_youth, p_message, p_severity, left(p_excerpt, 200))
     returning id into ev;
   insert into alerts(crisis_event_id, youth_id, recipient_id, level)
-    values (ev, auth.uid(), a.counselor_id, 'primary');
+    values (ev, p_youth, a.counselor_id, 'primary');
   -- 생명이 위급한 신호는 기다리지 않고 위기대응팀에도 바로 보낸다
   if p_severity = 'urgent' then
     insert into alerts(crisis_event_id, youth_id, recipient_id, level)
-      values (ev, auth.uid(), a.crisis_team_id, 'emergency')
+      values (ev, p_youth, a.crisis_team_id, 'emergency')
       on conflict do nothing;
   end if;
   return ev;
 end $$;
 
-create or replace function ack_alert(p_alert uuid) returns void
-language sql security definer set search_path = public as $$
-  update alerts set acked_at = now()
-   where id = p_alert and recipient_id = auth.uid() and acked_at is null
-$$;
-
 -- 확인되지 않은 알림을 다음 단계 담당자에게 넘긴다. 사람이 확인하면 멈춘다.
 create or replace function escalate_alerts() returns integer
-language plpgsql security definer set search_path = public as $$
+language plpgsql as $$
 declare
   r record;
   n integer := 0;
@@ -341,20 +232,11 @@ begin
   return n;
 end $$;
 
--- pg_cron이 켜져 있으면 1분마다 재전달을 돈다. 꺼져 있으면 상담사 화면 폴링이 같은 함수를 부른다.
-do $$
-begin
-  if exists (select 1 from pg_extension where extname = 'pg_cron') then
-    perform cron.unschedule('escalate_alerts') where exists (select 1 from cron.job where jobname = 'escalate_alerts');
-    perform cron.schedule('escalate_alerts', '* * * * *', 'select public.escalate_alerts()');
-  end if;
-end $$;
-
 -- ───────────────────────── 시연용 데이터 ─────────────────────────
 -- p_mode = 'fresh'      : 1단계, 선배의 첫 글만 있는 상태(첫 양방향 대화 → 2단계 시연)
 -- p_mode = 'four_weeks' : 2단계, 최근 2주간 주 3회씩 주고받은 상태(단계 제안 시연)
 create or replace function seed_youth_state(p_youth uuid, p_mode text) returns void
-language plpgsql security definer set search_path = public as $$
+language plpgsql as $$
 declare
   a assignments%rowtype;
   i integer;
@@ -388,18 +270,3 @@ begin
         now() - interval '20 hours');
   end if;
 end $$;
-
--- 누른 사람이 속한 데모 세트만 초기화한다
-create or replace function reset_my_demo_set(p_mode text) returns void
-language plpgsql security definer set search_path = public as $$
-declare
-  y uuid;
-begin
-  if my_role() not in ('counselor','mentor') then raise exception 'not allowed'; end if;
-  for y in select id from profiles where role = 'youth' and demo_set = my_demo_set() and demo_set > 0
-  loop
-    perform seed_youth_state(y, p_mode);
-  end loop;
-end $$;
-
-revoke execute on function seed_youth_state(uuid, text) from public, anon, authenticated;

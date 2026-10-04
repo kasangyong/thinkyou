@@ -24,7 +24,3 @@ export function splitWeeks(isoTimes: string[], now = Date.now()) {
   }
   return { thisWeek, lastWeek };
 }
-
-export function daysAgoIso(days: number) {
-  return new Date(Date.now() - days * 24 * 3600 * 1000).toISOString();
-}
