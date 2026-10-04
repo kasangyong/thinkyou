@@ -3,6 +3,7 @@ import { getMe } from "@/lib/auth";
 import { one, rows, sql } from "@/lib/db";
 import { kstDay, splitWeeks } from "@/lib/format";
 import { AppShell, Card, ContactWeeks, Label, MoodPicker, NavLink, StageLadder, StageProposal, StepCard, type MoodValue } from "@/ui/kit";
+import { SubmitButton } from "@/ui/submit-button";
 import { checkIn, completeStep, logout, respondStage, smallerStep } from "../actions";
 
 export default async function YouthHome() {
@@ -27,7 +28,7 @@ export default async function YouthHome() {
     <AppShell
       title={`${me.display_name} 님, 좋은 아침이에요`}
       subtitle="오늘의 한 걸음만 하면 충분해요"
-      right={<form action={logout}><button className="text-xs text-sub underline">로그아웃</button></form>}
+      right={<form action={logout}><SubmitButton className="text-xs text-sub underline">로그아웃</SubmitButton></form>}
     >
       {!checkin ? (
         <Card tone="ai">

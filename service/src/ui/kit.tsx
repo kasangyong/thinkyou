@@ -3,6 +3,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { CrisisDialog } from "./CrisisDialog";
+import { SubmitButton } from "./submit-button";
 
 // ───────── 공통 ─────────
 export function AppShell(props: { title: string; subtitle?: string; right?: ReactNode; children: ReactNode }) {
@@ -44,17 +45,17 @@ export function Label(props: { children: ReactNode }) {
 export function PrimaryButton(props: { children: ReactNode; name?: string; value?: string; tone?: "ink" | "person" }) {
   const tone = props.tone === "person" ? "bg-person text-ink" : "bg-ink text-white";
   return (
-    <button name={props.name} value={props.value} className={`w-full rounded-xl px-4 py-3 text-sm font-semibold ${tone} focus-visible:outline-3 focus-visible:outline-dusk`}>
+    <SubmitButton name={props.name} value={props.value} className={`w-full rounded-xl px-4 py-3 text-sm font-semibold ${tone} focus-visible:outline-3 focus-visible:outline-dusk`}>
       {props.children}
-    </button>
+    </SubmitButton>
   );
 }
 
 export function GhostButton(props: { children: ReactNode; name?: string; value?: string }) {
   return (
-    <button name={props.name} value={props.value} className="w-full rounded-xl px-4 py-2 text-sm text-sub hover:text-ink">
+    <SubmitButton name={props.name} value={props.value} className="w-full rounded-xl px-4 py-2 text-sm text-sub hover:text-ink">
       {props.children}
-    </button>
+    </SubmitButton>
   );
 }
 
@@ -74,15 +75,16 @@ export function MoodPicker(props: { action: (fd: FormData) => Promise<void>; sel
   return (
     <form action={props.action} className="grid grid-cols-3 gap-2" aria-label="오늘 컨디션">
       {moods.map(([v, label]) => (
-        <button
+        <SubmitButton
           key={v}
           name="mood"
           value={v}
-          aria-pressed={props.selected === v}
-          className="rounded-xl border border-line bg-white py-3 text-sm aria-pressed:border-ink aria-pressed:bg-ink aria-pressed:text-white"
+          pressed={props.selected === v}
+          pendingLabel="걸음 고르는 중"
+          className="rounded-xl border border-line bg-white py-3 text-sm aria-pressed:border-ink aria-pressed:bg-ink aria-pressed:text-white aria-busy:border-ink aria-busy:bg-ink aria-busy:text-white"
         >
           {label}
-        </button>
+        </SubmitButton>
       ))}
     </form>
   );
@@ -155,7 +157,7 @@ export function StageProposal(props: { proposed: number; action: (fd: FormData) 
       <p className="mb-3 mt-1 font-display text-lg text-ink">{STAGES[props.proposed]} 단계로 가 볼까요?</p>
       <form action={props.action} className="grid grid-cols-2 gap-2">
         <PrimaryButton name="accept" value="yes" tone="person">해 볼게요</PrimaryButton>
-        <button name="accept" value="no" className="rounded-xl bg-white px-4 py-3 text-sm text-sub">다음에</button>
+        <SubmitButton name="accept" value="no" className="rounded-xl bg-white px-4 py-3 text-sm text-sub">다음에</SubmitButton>
       </form>
     </Card>
   );
@@ -186,7 +188,7 @@ export function Composer(props: { action: (fd: FormData) => Promise<void>; hidde
       <label className="sr-only" htmlFor="body">메시지</label>
       <input id="body" name="body" required maxLength={1000} placeholder={props.placeholder} autoComplete="off"
         className="min-w-0 flex-1 rounded-xl border border-line bg-white px-3 py-3 text-sm" />
-      <button className="rounded-xl bg-ink px-4 text-sm font-semibold text-white">보내기</button>
+      <SubmitButton pendingLabel="보내는 중" className="shrink-0 rounded-xl bg-ink px-4 text-sm font-semibold text-white">보내기</SubmitButton>
     </form>
   );
 }

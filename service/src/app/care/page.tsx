@@ -4,6 +4,7 @@ import { rows, sql } from "@/lib/db";
 import { kstTime } from "@/lib/format";
 import { AlertItem, AppShell, Card, Label, YouthTable, type AlertView } from "@/ui/kit";
 import { AutoRefresh } from "@/ui/auto-refresh";
+import { SubmitButton } from "@/ui/submit-button";
 import { ackAlert, logout, recomputeStages, resetDemo } from "../actions";
 import { loadYouthRows } from "./rows";
 
@@ -55,7 +56,7 @@ export default async function CarePage() {
     <AppShell
       title={TITLE[role]}
       subtitle={open ? `확인하지 않은 위기 알림 ${open}건` : "확인할 위기 알림이 없어요"}
-      right={<form action={logout}><button className="text-xs text-sub underline">로그아웃</button></form>}
+      right={<form action={logout}><SubmitButton className="text-xs text-sub underline">로그아웃</SubmitButton></form>}
     >
       <AutoRefresh seconds={10} />
       {views.length === 0 ? (
@@ -71,11 +72,11 @@ export default async function CarePage() {
           <Card>
             <Label>시연 도구 (내 세트만)</Label>
             <div className="mt-2 flex flex-col gap-2">
-              <form action={recomputeStages}><button className="w-full rounded-xl border border-line bg-white py-2 text-sm">단계 재계산</button></form>
+              <form action={recomputeStages}><SubmitButton className="w-full rounded-xl border border-line bg-white py-2 text-sm">단계 재계산</SubmitButton></form>
               <form action={resetDemo}><input type="hidden" name="mode" value="fresh" />
-                <button className="w-full rounded-xl border border-line bg-white py-2 text-sm">처음 상태 (1단계, 선배 첫 글)</button></form>
+                <SubmitButton className="w-full rounded-xl border border-line bg-white py-2 text-sm">처음 상태 (1단계, 선배 첫 글)</SubmitButton></form>
               <form action={resetDemo}><input type="hidden" name="mode" value="four_weeks" />
-                <button className="w-full rounded-xl border border-line bg-white py-2 text-sm">4주 뒤 상태 (2단계, 2주간 주 3회)</button></form>
+                <SubmitButton className="w-full rounded-xl border border-line bg-white py-2 text-sm">4주 뒤 상태 (2단계, 2주간 주 3회)</SubmitButton></form>
             </div>
           </Card>
         </>
