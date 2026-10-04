@@ -1,0 +1,56 @@
+import { redirect } from "next/navigation";
+import { getMe } from "@/lib/auth";
+import { one, rows, sql } from "@/lib/db";
+import { kstDay, splitWeeks } from "@/lib/format";
+import { AppShell, Card, ContactWeeks, Label, MoodPicker, NavLink, StageLadder, StageProposal, StepCard, type MoodValue } from "@/ui/kit";
+import { SubmitButton } from "@/ui/submit-button";
+import { checkIn, completeStep, logout, respondStage, smallerStep } from "../actions";
+
+export default async function YouthHome() {
+  const me = await getMe();
+  if (!me || me.role !== "youth") redirect("/");
+  // 접속할 때마다 단계 제안 조건을 확인한다(2주 연속 주 3회 → 다음 단계 제안)
+  await sql`select compute_stage_proposal(${me.id})`;
+
+  const today = kstDay();
+  const [checkin, step, stage, contacts, reaction, target] = await Promise.all([
+    one<{ mood: string }>(sql`select mood from checkins where youth_id = ${me.id} and day = ${today}`),
+    one<{ text: string; done_at: string | null }>(sql`select text, done_at from daily_steps where youth_id = ${me.id} and day = ${today}`),
+    one<{ stage: number; proposed_stage: number | null }>(sql`select stage, proposed_stage from stage_state where youth_id = ${me.id}`),
+    rows<{ occurred_at: string }>(sql`select occurred_at from contacts where youth_id = ${me.id} and occurred_at >= now() - interval '14 days'`),
+    one<{ n: number }>(sql`select count(*)::int as n from reactions where youth_id = ${me.id} and created_at >= now() - interval '14 days'`),
+    one<{ value: number }>(sql`select value from app_config where key = 'weekly_contact_target'`),
+  ]);
+  const weeks = splitWeeks(contacts.map((c) => new Date(c.occurred_at).toISOString()));
+  const reactionCount = reaction?.n ?? 0;
+
+  return (
+    <AppShell
+      title={`${me.display_name} 님, 좋은 아침이에요`}
+      subtitle="오늘의 한 걸음만 하면 충분해요"
+      right={<form action={logout}><SubmitButton className="text-xs text-sub underline">로그아웃</SubmitButton></form>}
+    >
+      {!checkin ? (
+        <Card tone="ai">
+          <p className="mb-3 text-sm text-ink">지금 기분은 어느 쪽에 가까워요?</p>
+          <MoodPicker action={checkIn} />
+        </Card>
+      ) : step ? (
+        <StepCard text={step.text} done={!!step.done_at} doneAction={completeStep} smallerAction={smallerStep} />
+      ) : (
+        <Card><p className="text-sm">오늘의 걸음을 준비하고 있어요.</p><MoodPicker action={checkIn} selected={checkin.mood as MoodValue} /></Card>
+      )}
+
+      {stage?.proposed_stage != null && <StageProposal proposed={stage.proposed_stage} action={respondStage} />}
+
+      <NavLink href="/youth/chat">선배와 주고받기</NavLink>
+
+      <ContactWeeks lastWeek={weeks.lastWeek} thisWeek={weeks.thisWeek} target={target?.value ?? 3} reactions={reactionCount ?? 0} />
+
+      <Card>
+        <Label>나의 걸음</Label>
+        <div className="mt-2"><StageLadder stage={stage?.stage ?? 0} /></div>
+      </Card>
+    </AppShell>
+  );
+}
