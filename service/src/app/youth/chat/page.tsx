@@ -12,7 +12,9 @@ type Msg = { id: string; sender_id: string; body: string; created_at: string };
 export default async function YouthChat({ searchParams }: PageProps<"/youth/chat">) {
   const me = await getMe();
   if (!me || me.role !== "youth") redirect("/");
-  const { crisis } = await searchParams;
+  const { crisis, draft } = await searchParams;
+  // 홈의 "선배에게 한 줄로 알려 보기"에서 넘어오면 입력창에 미리 채워 둔다(보내기는 본인이)
+  const draftText = typeof draft === "string" ? draft.slice(0, 200) : undefined;
 
   const [mentor, messages, stage] = await Promise.all([
     one<{ display_name: string }>(sql`
@@ -27,7 +29,7 @@ export default async function YouthChat({ searchParams }: PageProps<"/youth/chat
       title={`${mentorName} 님과 주고받기`}
       subtitle={(stage?.stage ?? 0) >= 2 ? `지금 ${stage?.stage}단계 · 주고받은 대화가 쌓이고 있어요` : "선배의 글에 한 줄만 답해도 돼요"}
       right={<Link href="/youth" className="text-xs text-sub underline">홈</Link>}
-      dock={<Composer action={sendMessage} placeholder="한 줄만 적어도 괜찮아요" />}
+      dock={<Composer action={sendMessage} placeholder="한 줄만 적어도 괜찮아요" defaultValue={draftText} />}
     >
       <AutoRefresh seconds={10} />
       <MessageList

@@ -55,9 +55,11 @@ create table if not exists daily_steps (
   text text not null,
   size text not null default 'normal' check (size in ('normal','small')),
   done_at timestamptz,
+  feedback text check (feedback in ('easy','right','hard')),   -- 걸음을 마친 뒤 본인 평가. 다음 걸음 크기에 반영
   created_at timestamptz not null default now(),
   unique (youth_id, day)
 );
+alter table daily_steps add column if not exists feedback text;
 
 -- ───────────────────────── 선배와 주고받기 ─────────────────────────
 -- 청년 1명당 대화방 1개(youth_id로 식별)

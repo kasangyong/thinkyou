@@ -2,9 +2,10 @@ import { redirect } from "next/navigation";
 import { getMe } from "@/lib/auth";
 import { one, rows, sql } from "@/lib/db";
 import { kstDay, splitWeeks } from "@/lib/format";
-import { AppShell, Card, ContactWeeks, Label, MoodPicker, NavLink, StageLadder, StageProposal, StepCard, type MoodValue } from "@/ui/kit";
+import { AppShell, Card, ContactWeeks, Label, MoodPicker, NavLink, StageLadder, StageProposal, StepCard, type MoodValue, type StepFeedback } from "@/ui/kit";
 import { SubmitButton } from "@/ui/submit-button";
-import { checkIn, completeStep, logout, respondStage, smallerStep } from "../actions";
+import { checkIn, completeStep, logout, respondStage, smallerStep, stepFeedback } from "../actions";
+import { ensureMigrations } from "@/lib/migrate";
 
 export default async function YouthHome() {
   const me = await getMe();
@@ -12,15 +13,23 @@ export default async function YouthHome() {
   // 접속할 때마다 단계 제안 조건을 확인한다(2주 연속 주 3회 → 다음 단계 제안)
   await sql`select compute_stage_proposal(${me.id})`;
 
+  await ensureMigrations();
   const today = kstDay();
-  const [checkin, step, stage, contacts, reaction, target] = await Promise.all([
+  const [checkin, step, stage, contacts, reaction, target, mentor, week] = await Promise.all([
     one<{ mood: string }>(sql`select mood from checkins where youth_id = ${me.id} and day = ${today}`),
-    one<{ text: string; done_at: string | null }>(sql`select text, done_at from daily_steps where youth_id = ${me.id} and day = ${today}`),
+    one<{ text: string; done_at: string | null; feedback: StepFeedback | null }>(
+      sql`select text, done_at, feedback from daily_steps where youth_id = ${me.id} and day = ${today}`),
     one<{ stage: number; proposed_stage: number | null }>(sql`select stage, proposed_stage from stage_state where youth_id = ${me.id}`),
     rows<{ occurred_at: string }>(sql`select occurred_at from contacts where youth_id = ${me.id} and occurred_at >= now() - interval '14 days'`),
     one<{ n: number }>(sql`select count(*)::int as n from reactions where youth_id = ${me.id} and created_at >= now() - interval '14 days'`),
     one<{ value: number }>(sql`select value from app_config where key = 'weekly_contact_target'`),
+    one<{ display_name: string }>(sql`
+      select p.display_name from assignments a join profiles p on p.id = a.mentor_id where a.youth_id = ${me.id}`),
+    one<{ n: number }>(sql`
+      select count(*)::int as n from daily_steps
+       where youth_id = ${me.id} and done_at is not null and day > ${today}::date - 7`),
   ]);
+  const mentorName = mentor?.display_name ?? "선배";
   const weeks = splitWeeks(contacts.map((c) => new Date(c.occurred_at).toISOString()));
   const reactionCount = reaction?.n ?? 0;
 
@@ -36,7 +45,17 @@ export default async function YouthHome() {
           <MoodPicker action={checkIn} />
         </Card>
       ) : step ? (
-        <StepCard text={step.text} done={!!step.done_at} doneAction={completeStep} smallerAction={smallerStep} />
+        <StepCard
+          text={step.text}
+          done={!!step.done_at}
+          doneAction={completeStep}
+          smallerAction={smallerStep}
+          feedback={step.feedback}
+          feedbackAction={stepFeedback}
+          mentorName={mentorName}
+          weekDone={week?.n ?? 0}
+          shareHref={`/youth/chat?draft=${encodeURIComponent(`오늘 한 걸음: ${step.text}. 해 봤어요`)}`}
+        />
       ) : (
         <Card><p className="text-sm">오늘의 걸음을 준비하고 있어요.</p><MoodPicker action={checkIn} selected={checkin.mood as MoodValue} /></Card>
       )}

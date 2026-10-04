@@ -94,18 +94,52 @@ export function MoodPicker(props: { action: (fd: FormData) => Promise<void>; sel
   );
 }
 
+export type StepFeedback = "easy" | "right" | "hard";
+
 export function StepCard(props: {
   text: string;
   done: boolean;
   doneAction: () => Promise<void>;
   smallerAction: () => Promise<void>;
+  feedback: StepFeedback | null;
+  feedbackAction: (fd: FormData) => Promise<void>;
+  // 걸음을 마치면 선배에게 한 줄로 알릴 수 있게 대화창으로 이어 준다(인증이 아니라 대화의 계기)
+  shareHref: string;
+  mentorName: string;
+  weekDone: number;
 }) {
+  const choices: [StepFeedback, string][] = [["easy", "쉬웠어요"], ["right", "딱 좋았어요"], ["hard", "버거웠어요"]];
   return (
     <Card>
-      <Label>오늘의 한 걸음</Label>
+      <div className="flex items-center justify-between">
+        <Label>오늘의 한 걸음</Label>
+        <span className="text-xs text-sub">이번 주 {props.weekDone}걸음</span>
+      </div>
       <p className="mb-3 mt-2 font-display text-xl leading-snug text-ink">{props.text}</p>
       {props.done ? (
-        <p className="rounded-xl bg-person-soft px-4 py-3 text-center text-sm font-semibold text-ink">오늘 걸음을 마쳤어요</p>
+        <div className="flex flex-col gap-3">
+          <p className="rounded-xl bg-person-soft px-4 py-3 text-center text-sm font-semibold text-ink">오늘 걸음을 마쳤어요</p>
+          {props.feedback === null ? (
+            <form action={props.feedbackAction} aria-label="오늘 걸음은 어땠어요?">
+              <p className="mb-2 text-xs text-sub">어땠어요? 내일 걸음 크기에 반영할게요</p>
+              <div className="grid grid-cols-3 gap-2">
+                {choices.map(([v, label]) => (
+                  <SubmitButton key={v} name="feedback" value={v} pendingLabel="저장 중"
+                    className="rounded-xl border border-line bg-white py-2.5 text-sm text-ink">
+                    {label}
+                  </SubmitButton>
+                ))}
+              </div>
+            </form>
+          ) : (
+            <p className="text-center text-xs text-sub">
+              {props.feedback === "hard" ? "내일은 더 작은 걸음으로 준비할게요" : props.feedback === "easy" ? "내일은 한 뼘만 더 가 볼게요" : "내일도 이만큼이면 충분해요"}
+            </p>
+          )}
+          <Link href={props.shareHref} className="block rounded-xl bg-person px-4 py-3 text-center text-sm font-semibold text-ink">
+            {props.mentorName} 님에게 한 줄로 알려 보기
+          </Link>
+        </div>
       ) : (
         <>
           <form action={props.doneAction}><PrimaryButton>했어요</PrimaryButton></form>
@@ -187,12 +221,12 @@ export function MessageList(props: { messages: ChatMessage[]; emptyText: string 
   );
 }
 
-export function Composer(props: { action: (fd: FormData) => Promise<void>; hidden?: Record<string, string>; placeholder: string }) {
+export function Composer(props: { action: (fd: FormData) => Promise<void>; hidden?: Record<string, string>; placeholder: string; defaultValue?: string }) {
   return (
     <form action={props.action} className="flex gap-2">
       {Object.entries(props.hidden ?? {}).map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
       <label className="sr-only" htmlFor="body">메시지</label>
-      <input id="body" name="body" required maxLength={1000} placeholder={props.placeholder} autoComplete="off"
+      <input id="body" name="body" required maxLength={1000} placeholder={props.placeholder} autoComplete="off" defaultValue={props.defaultValue}
         className="min-w-0 flex-1 rounded-xl border border-line bg-white px-3 py-3 text-sm" />
       <SubmitButton pendingLabel="보내는 중" className="shrink-0 rounded-xl bg-ink px-4 text-sm font-semibold text-white">보내기</SubmitButton>
     </form>

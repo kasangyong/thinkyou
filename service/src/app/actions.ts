@@ -7,7 +7,8 @@ import { canUseThread, endSession, hashPassword, requireRole, startSession, veri
 import { detectCrisis } from "@/lib/crisis";
 import { ensureDemoAccounts } from "@/lib/demo";
 import { kstDay } from "@/lib/format";
-import { suggestStep, type Mood, type StepSize } from "@/lib/gemini";
+import { suggestStep, type Feedback, type Mood, type StepSize } from "@/lib/gemini";
+import { ensureMigrations } from "@/lib/migrate";
 
 // 오류가 나도 입력값(비밀번호 제외)을 돌려줘서 다시 채워 준다
 export type FormState = { error?: string; values?: Record<string, string> } | undefined;
@@ -93,13 +94,36 @@ export async function completeStep() {
 }
 
 async function makeStep(youthId: string, mood: Mood, size: StepSize) {
-  const [st, recent] = await Promise.all([
+  await ensureMigrations();
+  const [st, recent, last] = await Promise.all([
     one<{ stage: number }>(sql`select stage from stage_state where youth_id = ${youthId}`),
     rows<{ text: string }>(sql`select text from daily_steps where youth_id = ${youthId} order by day desc limit 3`),
+    one<{ feedback: Feedback }>(sql`
+      select feedback from daily_steps
+       where youth_id = ${youthId} and day < ${kstDay()} and feedback is not null
+       order by day desc limit 1`),
   ]);
-  const text = await suggestStep({ mood, size, stage: st?.stage ?? 0, recentSteps: recent.map((r) => r.text) });
+  // 어제 걸음이 버거웠다면 오늘은 처음부터 작게
+  if (last?.feedback === "hard") size = "small";
+  const text = await suggestStep({
+    mood,
+    size,
+    stage: st?.stage ?? 0,
+    recentSteps: recent.map((r) => r.text),
+    lastFeedback: last?.feedback ?? null,
+  });
   await sql`insert into daily_steps(youth_id, day, text, size) values (${youthId}, ${kstDay()}, ${text}, ${size})
             on conflict (youth_id, day) do update set text = excluded.text, size = excluded.size, done_at = null`;
+}
+
+// 걸음을 마친 뒤 "쉬웠어요/딱 좋았어요/버거웠어요". 다음 날 걸음 크기에 반영한다.
+export async function stepFeedback(formData: FormData) {
+  const me = await requireRole(["youth"]);
+  const value = String(formData.get("feedback"));
+  if (!["easy", "right", "hard"].includes(value)) return;
+  await ensureMigrations();
+  await sql`update daily_steps set feedback = ${value} where youth_id = ${me.id} and day = ${kstDay()} and done_at is not null`;
+  revalidatePath("/youth");
 }
 
 // 단계를 올릴지는 청년 본인이 정한다
@@ -136,6 +160,8 @@ export async function sendMessage(formData: FormData) {
     }
   }
   revalidatePath(back);
+  // 주소에 남은 ?draft= 가 입력창을 다시 채우지 않도록 깨끗한 주소로 돌아간다
+  redirect(back);
 }
 
 // ───────── 돌봄(상담사·예비 담당·위기대응팀) ─────────
