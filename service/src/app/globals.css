@@ -1,0 +1,24 @@
+@import "tailwindcss";
+
+/* 목업과 같은 색: 밤(AI) → 새벽(사람) */
+@theme {
+  --color-night: #1e2340;
+  --color-paper: #f7f8fb;
+  --color-ink: #1b1f2e;
+  --color-sub: #5e6680;
+  --color-line: #e3e7f1;
+  --color-person: #e8954a;
+  --color-person-soft: #fbe7d3;
+  --color-ai: #a9a3ec;
+  --color-ai-soft: #eceafd;
+  --color-alert: #b8452f;
+  --color-alert-soft: #f8e4df;
+  --font-display: "Gowun Batang", serif;
+  --font-sans: "IBM Plex Sans KR", system-ui, sans-serif;
+}
+
+body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}

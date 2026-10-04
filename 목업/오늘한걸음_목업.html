@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>오늘한걸음 화면 목업</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --night:#1E2340; --dusk:#3B4A7A; --haze:#9DB0D6; --dawn:#F3E3CF;
+    --paper:#F7F8FB; --ink:#1B1F2E; --sub:#5E6680; --line:#E3E7F1;
+    --person:#E8954A; --person-soft:#FBE7D3;
+    --ai:#A9A3EC; --ai-soft:#ECEAFD;
+    --alert:#B8452F; --alert-soft:#F8E4DF;
+    --display:"Gowun Batang", serif;
+    --body:"IBM Plex Sans KR", system-ui, sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:var(--body);color:var(--ink);background:var(--night)}
+  .canvas{
+    min-height:100vh;padding:56px 48px 40px;
+    background:linear-gradient(100deg,var(--night) 0%,var(--dusk) 30%,var(--haze) 68%,var(--dawn) 100%);
+  }
+  header{max-width:1640px;margin:0 auto 40px;display:flex;justify-content:space-between;align-items:flex-end;gap:32px;flex-wrap:wrap}
+  header h1{font-family:var(--display);font-weight:700;font-size:44px;color:#fff;letter-spacing:-.5px}
+  header p{color:#D5DBEC;font-size:17px;margin-top:10px;line-height:1.6}
+  .legend{display:flex;gap:20px;color:#1E2340;font-size:14px;background:rgba(255,255,255,.75);padding:10px 16px;border-radius:999px}
+  .legend span{display:flex;align-items:center;gap:8px}
+  .dot{display:inline-block;border-radius:50%}
+  .dot.ai{width:12px;height:12px;background:var(--ai);box-shadow:0 0 0 4px var(--ai-soft)}
+  .dot.person{width:12px;height:12px;background:var(--person)}
+
+  .row{max-width:1640px;margin:0 auto;display:grid;grid-template-columns:repeat(5,1fr);gap:28px;align-items:start}
+  figure{display:flex;flex-direction:column;align-items:center}
+  figcaption{margin-top:18px;width:100%;max-width:300px}
+  figcaption b{display:block;font-family:var(--display);font-size:19px;color:#fff;margin-bottom:6px}
+  figcaption span{font-size:14px;line-height:1.6;color:#E8ECF6;display:block}
+  figure:nth-child(n+4) figcaption b{color:var(--night)}
+  figure:nth-child(n+4) figcaption span{color:#2F3655}
+
+  /* phone */
+  .phone{width:300px;height:620px;border-radius:42px;background:#0E1020;padding:10px;box-shadow:0 24px 60px rgba(14,16,32,.35)}
+  .screen{position:relative;height:100%;border-radius:34px;background:var(--paper);overflow:hidden;display:flex;flex-direction:column}
+  .status{display:flex;justify-content:space-between;padding:14px 22px 6px;font-size:12px;font-weight:600;color:var(--sub)}
+  .appbar{display:flex;align-items:center;justify-content:space-between;padding:6px 20px 10px}
+  .appbar .name{font-family:var(--display);font-weight:700;font-size:17px}
+  .appbar .when{font-size:12px;color:var(--sub)}
+  .body{flex:1;padding:4px 18px 18px;display:flex;flex-direction:column;gap:12px;font-size:13.5px;line-height:1.55}
+  .label{font-size:11.5px;font-weight:600;color:var(--sub);letter-spacing:.2px}
+
+  /* AI orb: shrinks screen by screen */
+  .orb{border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff 0%,var(--ai) 55%,#8C85DF 100%);box-shadow:0 0 0 6px var(--ai-soft);flex:none}
+  .ai-line{display:flex;gap:10px;align-items:flex-start}
+  .ai-say{background:var(--ai-soft);border-radius:4px 14px 14px 14px;padding:10px 12px}
+
+  /* screen 1 */
+  .mood{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+  .mood button{font:inherit;font-size:13px;border:1px solid var(--line);background:#fff;border-radius:12px;padding:10px 0;color:var(--ink)}
+  .mood button[aria-pressed=true]{border-color:var(--ink);background:var(--ink);color:#fff}
+  .step{background:#fff;border:1px solid var(--line);border-radius:18px;padding:16px}
+  .step h3{font-family:var(--display);font-size:20px;line-height:1.4;margin:6px 0 12px}
+  .btn{display:block;width:100%;font:inherit;font-weight:600;font-size:14px;border:0;border-radius:12px;padding:12px;background:var(--ink);color:#fff;text-align:center}
+  .btn.ghost{background:transparent;color:var(--sub);font-weight:500;padding:8px}
+  .btn.person{background:var(--person);color:#fff}
+
+  /* screen 2 */
+  .letter{background:#fff;border:1px solid var(--line);border-radius:16px;padding:14px}
+  .who{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--sub);margin-bottom:6px}
+  .who .dot.person{width:22px;height:22px}
+  .who b{color:var(--ink);font-size:13px}
+  .bubble{max-width:82%;padding:9px 12px;border-radius:14px}
+  .me{align-self:flex-end;background:var(--ink);color:#fff;border-radius:14px 4px 14px 14px}
+  .them{align-self:flex-start;background:var(--person-soft);border-radius:4px 14px 14px 14px}
+  .chip{align-self:center;font-size:12px;font-weight:600;color:#7A4A1E;background:var(--person-soft);border:1px dashed var(--person);border-radius:999px;padding:6px 12px}
+
+  /* screen 3 */
+  .ladder{display:flex;flex-direction:column-reverse;gap:6px}
+  .rung{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;font-size:12.5px;color:var(--sub);background:#fff;border:1px solid var(--line)}
+  .rung i{font-style:normal;font-weight:700;width:18px;text-align:center}
+  .rung.done{color:var(--ink)}
+  .rung.now{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .week{display:flex;gap:6px;align-items:center;font-size:12px;color:var(--sub)}
+  .week .dot.person{width:14px;height:14px}
+  .week .empty{width:14px;height:14px;border-radius:50%;border:1.5px solid var(--line)}
+  .split{height:10px;border-radius:999px;overflow:hidden;display:flex;background:var(--line)}
+  .split .p{background:var(--person)} .split .a{background:var(--ai)}
+  .meta{display:flex;justify-content:space-between;font-size:11.5px;color:var(--sub)}
+  .offer{background:var(--person-soft);border-radius:16px;padding:14px}
+  .offer h4{font-family:var(--display);font-size:16px;margin-bottom:4px}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+
+  /* screen 4 */
+  .door{background:#fff;border:1px solid var(--line);border-radius:18px;padding:16px}
+  .door h3{font-family:var(--display);font-size:21px;line-height:1.4;margin-bottom:10px}
+  .door ul{list-style:none;display:flex;flex-direction:column;gap:10px}
+  .door li{display:flex;gap:10px;align-items:flex-start;font-size:13px}
+  .door li em{font-style:normal;font-size:11.5px;color:var(--sub);display:block}
+  .door li .dot.person{width:10px;height:10px;margin-top:6px}
+
+  /* screen 5 */
+  .screen.dim::after{content:"";position:absolute;inset:0;background:rgba(14,16,32,.45)}
+  .sheet{position:absolute;left:0;right:0;bottom:0;z-index:2;background:#fff;border-radius:24px 24px 0 0;padding:18px 18px 22px;display:flex;flex-direction:column;gap:10px}
+  .grab{width:40px;height:4px;border-radius:2px;background:var(--line);align-self:center}
+  .sheet h3{font-family:var(--display);font-size:19px;line-height:1.4}
+  .call{display:flex;justify-content:space-between;align-items:center;border-radius:14px;padding:13px 14px;background:var(--alert);color:#fff;font-weight:600}
+  .call small{font-weight:400;opacity:.9;font-size:11.5px;display:block}
+  .call.soft{background:var(--alert-soft);color:var(--alert)}
+  .note{font-size:11.5px;color:var(--sub);line-height:1.5}
+
+  footer{max-width:1640px;margin:40px auto 0;font-size:13px;color:#2F3655;text-align:right}
+
+  @media (max-width:1500px){ .row{grid-template-columns:repeat(3,1fr)} figure:nth-child(n+4) figcaption b{color:#fff} figure:nth-child(n+4) figcaption span{color:#E8ECF6}}
+  @media (max-width:1000px){ .row{grid-template-columns:repeat(2,1fr)} }
+  @media (max-width:680px){ .canvas{padding:32px 16px} .row{grid-template-columns:1fr} header h1{font-size:32px} }
+  button:focus-visible{outline:3px solid var(--person);outline-offset:2px}
+</style>
+</head>
+<body>
+<main class="canvas">
+  <header>
+    <div>
+      <h1>오늘한걸음</h1>
+      <p>AI가 붙잡지 않고, 사람에게 돌려보냅니다.<br>왼쪽에서 오른쪽으로 갈수록 AI(보라 점)는 작아지고, 사람(주황 점)은 늘어납니다.</p>
+    </div>
+    <div class="legend" aria-label="범례">
+      <span><i class="dot ai"></i>AI</span>
+      <span><i class="dot person"></i>사람(회복 선배·담당자)</span>
+    </div>
+  </header>
+
+  <section class="row">
+    <!-- 1 -->
+    <figure>
+      <div class="phone"><div class="screen">
+        <div class="status"><span>11:02</span><span>●●● 5G</span></div>
+        <div class="appbar"><span class="name">오늘한걸음</span><span class="when">월요일 아침</span></div>
+        <div class="body">
+          <div class="ai-line">
+            <div class="orb" style="width:40px;height:40px"></div>
+            <div class="ai-say">일어났네요. 지금 기분은 어느 쪽에 가까워요?</div>
+          </div>
+          <div class="mood" role="group" aria-label="오늘 컨디션">
+            <button aria-pressed="false">힘듦</button>
+            <button aria-pressed="true">보통</button>
+            <button aria-pressed="false">괜찮음</button>
+          </div>
+          <div class="step">
+            <span class="label">오늘의 한 걸음</span>
+            <h3>커튼 열고<br>창밖 사진 한 장</h3>
+            <button class="btn">사진 찍기</button>
+            <button class="btn ghost">더 작은 걸음으로 바꾸기</button>
+          </div>
+          <p class="note">어제 밤에 읽은 선배 글에 아직 답장하지 않았어요. 오후에 한 줄만 써 볼까요?</p>
+        </div>
+      </div></div>
+      <figcaption><b>아침 체크와 오늘의 한 걸음</b><span>30초 컨디션 체크로 하루를 시작합니다. 힘든 날에는 걸음을 더 잘게 쪼갭니다.</span></figcaption>
+    </figure>
+
+    <!-- 2 -->
+    <figure>
+      <div class="phone"><div class="screen">
+        <div class="status"><span>19:40</span><span>●●● 5G</span></div>
+        <div class="appbar"><span class="name">선배의 글</span><span class="when">비동기 · 48시간 안에 회신</span></div>
+        <div class="body">
+          <div class="letter">
+            <div class="who"><i class="dot person"></i><div><b>먼저 걸은 사람, 해솔</b><br>은둔 3년, 지금은 회복 2년 차</div></div>
+            저도 커튼 여는 데 한 달 걸렸어요. 사진은 흐려도 괜찮아요. 오늘 찍은 하늘은 어땠어요?
+          </div>
+          <div class="bubble me">구름 많았어요. 그래도 열었어요</div>
+          <div class="bubble them">열었다는 게 제일 커요. 내일도 하늘 보여 줄래요?</div>
+          <div class="chip">첫 양방향 대화 · 2단계가 열렸어요</div>
+          <div class="ai-line" style="margin-top:auto">
+            <div class="orb" style="width:26px;height:26px"></div>
+            <div class="ai-say" style="font-size:12.5px">첫 문장이 막히면 같이 써요.</div>
+          </div>
+        </div>
+      </div></div>
+      <figcaption><b>선배와 주고받기</b><span>읽기만 하거나 이모지만 남긴 건 '반응'으로 따로 셉니다. 선배의 회신이 와서 실제로 오간 대화부터 성과로 칩니다.</span></figcaption>
+    </figure>
+
+    <!-- 3 -->
+    <figure>
+      <div class="phone"><div class="screen">
+        <div class="status"><span>20:10</span><span>●●● 5G</span></div>
+        <div class="appbar"><span class="name">나의 걸음</span><span class="when">시작한 지 4주</span></div>
+        <div class="body">
+          <div class="ladder" aria-label="회복 단계">
+            <div class="rung done"><i>0</i>AI와 이야기하기</div>
+            <div class="rung done"><i>1</i>선배의 글 읽기</div>
+            <div class="rung now"><i>2</i>선배와 글 주고받기</div>
+            <div class="rung"><i>3</i>음성 · 2~3인 온라인 모임</div>
+            <div class="rung"><i>4</i>밖에서 만나기 · 기관 프로그램</div>
+          </div>
+          <div>
+            <span class="label">양방향 접촉 · 주 3회 목표</span>
+            <div class="week" style="margin-top:6px">지난주 <i class="dot person"></i><i class="dot person"></i><i class="dot person"></i>&nbsp; 이번 주 <i class="dot person"></i><i class="dot person"></i><i class="dot person"></i></div>
+          </div>
+          <div>
+            <div class="meta"><span>사람과 주고받은 비중</span><span>4주 전 10% → 지금 40%</span></div>
+            <div class="split" style="margin-top:6px"><div class="p" style="width:40%"></div><div class="a" style="width:60%"></div></div>
+          </div>
+          <div class="offer">
+            <div class="ai-line" style="gap:8px;align-items:center;margin-bottom:6px"><div class="orb" style="width:16px;height:16px;box-shadow:0 0 0 4px var(--ai-soft)"></div><span class="label">2주 연속 목표를 채웠어요</span></div>
+            <h4>목요일 8시, 2인 모임</h4>
+            해솔 님과 30분, 카메라는 꺼도 돼요.
+            <div class="two"><button class="btn person">참여해 볼게요</button><button class="btn ghost" style="background:#fff">다음 주에</button></div>
+          </div>
+        </div>
+      </div></div>
+      <figcaption><b>나의 걸음</b><span>2주간 주 3회 주고받으면 AI가 다음 단계를 제안하고, 오를지는 본인이 정합니다. AI와의 대화 비중은 줄어듭니다.</span></figcaption>
+    </figure>
+
+    <!-- 4 -->
+    <figure>
+      <div class="phone"><div class="screen">
+        <div class="status"><span>10:30</span><span>●●● 5G</span></div>
+        <div class="appbar"><span class="name">오늘한걸음</span><span class="when">2주 만이에요</span></div>
+        <div class="body">
+          <div class="door">
+            <span class="label">돌아올 문</span>
+            <h3>쉬어 가도 괜찮아요.<br>문은 열어 둘게요.</h3>
+            <ul>
+              <li><i class="dot person"></i><div>담당 상담사 김○○<em>평일 10~18시, 문자도 괜찮아요</em></div></li>
+              <li><i class="dot person"></i><div>재택 일경험 과정 다음 기수 모집 중<em>지원서 초안을 만들어 둘까요?</em></div></li>
+              <li><i class="dot person"></i><div>다시 시작할 걸음<em>1단계부터, 아주 작게</em></div></li>
+            </ul>
+          </div>
+          <button class="btn">다시 시작하기</button>
+          <p class="note">시작할 때 동의한 대로 2주 뒤에 한 번 연락드렸어요. 연락을 원하지 않으면 설정에서 끌 수 있어요.</p>
+          <div class="ai-line" style="margin-top:auto;align-items:center"><div class="orb" style="width:10px;height:10px;box-shadow:0 0 0 3px var(--ai-soft)"></div><span class="note">AI 작성 메시지</span></div>
+        </div>
+      </div></div>
+      <figcaption><b>돌아올 문</b><span>연락이 끊겨도 본인이 동의한 경우에만 2주·1달 뒤 안부 대신 담당자, 다음 모집, 다시 시작할 단계를 건넵니다.</span></figcaption>
+    </figure>
+
+    <!-- 5 -->
+    <figure>
+      <div class="phone"><div class="screen dim">
+        <div class="status"><span>02:14</span><span>●●● 5G</span></div>
+        <div class="appbar"><span class="name">오늘한걸음</span><span class="when">밤 회고</span></div>
+        <div class="body">
+          <div class="bubble me">요즘은 그냥 다 그만두고 싶어요</div>
+        </div>
+        <div class="sheet" role="dialog" aria-label="지금 바로 사람과 연결">
+          <div class="grab"></div>
+          <h3>지금은 사람과<br>이야기해요</h3>
+          <div class="call"><span>109 자살예방상담<small>24시간 · 무료 · 익명 가능</small></span><span>전화</span></div>
+          <div class="call soft"><span>위급하면 119 · 112</span><span>전화</span></div>
+          <p class="note">위험 신호는 공유 설정과 관계없이 위기대응 담당자에게도 전해집니다. 가입할 때 안내한 원칙이에요.</p>
+        </div>
+      </div></div>
+      <figcaption><b>위기에는 바로 사람에게</b><span>위험 표현이 감지되면 AI는 대화를 이어 가지 않고 109 연결을 띄웁니다. 담당자에게는 사람이 확인할 때까지 알림이 넘어갑니다.</span></figcaption>
+    </figure>
+  </section>
+
+  <footer>화면은 기획 설명을 위한 예시이며, 인물·이름·수치는 가상입니다.</footer>
+</main>
+<script>
+  // 고해상도 내보내기용: 주소 뒤에 #x2 를 붙이면 2배로 확대해 렌더링
+  if (location.hash === "#x2") document.documentElement.style.zoom = 2;
+</script>
+</body>
+</html>
