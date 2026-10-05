@@ -135,9 +135,10 @@ export async function stepFeedback(formData: FormData) {
 export async function respondStage(formData: FormData) {
   const me = await requireRole(["youth"]);
   const accept = formData.get("accept") === "yes";
+  // 수락이든 "다음에"든 그때부터 접촉을 다시 센다. 거절한 제안이 바로 다시 뜨지 않도록
   await sql`update stage_state
                set stage = case when ${accept}::boolean then proposed_stage else stage end,
-                   stage_since = case when ${accept}::boolean then now() else stage_since end,
+                   stage_since = now(),
                    proposed_stage = null, proposed_at = null, updated_at = now()
              where youth_id = ${me.id} and proposed_stage is not null`;
   revalidatePath("/youth");
