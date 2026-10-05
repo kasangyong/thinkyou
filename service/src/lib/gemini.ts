@@ -56,8 +56,8 @@ function logFailure(where: string, e: unknown) {
 let client: GoogleGenAI | null = null;
 function ai() {
   if (!process.env.GEMINI_API_KEY) return null;
-  // 한 번 기다리는 시간을 8초로 묶는다. 늦으면 다음 모델이나 기본 문장으로 넘어간다
-  client ??= new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY, httpOptions: { timeout: 8000 } });
+  // 한 번 기다리는 시간을 10초로 묶는다(Gemini가 허용하는 최소값). 늦으면 다음 모델이나 기본 문장으로 넘어간다
+  client ??= new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY, httpOptions: { timeout: 10_000 } });
   return client;
 }
 
