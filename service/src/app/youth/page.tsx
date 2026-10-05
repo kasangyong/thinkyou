@@ -2,9 +2,10 @@ import { redirect } from "next/navigation";
 import { getMe } from "@/lib/auth";
 import { one, rows, sql } from "@/lib/db";
 import { kstDay, splitWeeks } from "@/lib/format";
-import { AppShell, Card, ContactWeeks, Label, MoodPicker, NavLink, StageLadder, StageProposal, StepCard, type MoodValue, type StepFeedback } from "@/ui/kit";
+import { AppShell, Card, ContactWeeks, DoorCard, Label, MoodPicker, NavLink, PromiseCard, RoomLink, StageLadder, StageProposal, StepCard, type MoodValue, type StepFeedback } from "@/ui/kit";
 import { SubmitButton } from "@/ui/submit-button";
-import { checkIn, completeStep, logout, respondStage, smallerStep, stepFeedback } from "../actions";
+import { checkIn, comeBack, completeStep, dropPromise, logout, respondStage, setPromise, smallerStep, stepFeedback } from "../actions";
+import { loadAway } from "@/lib/reconnect";
 import { ensureMigrations } from "@/lib/migrate";
 
 export default async function YouthHome() {
@@ -30,6 +31,19 @@ export default async function YouthHome() {
        where youth_id = ${me.id} and done_at is not null and day > ${today}::date - 7`),
   ]);
   const mentorName = mentor?.display_name ?? "선배";
+
+  // 상시 대기실·재연결 약속
+  const myStage = stage?.stage ?? 0;
+  const [promise, away, counselor, fit] = await Promise.all([
+    one<{ after_days: number }>(sql`select after_days from reconnect_promises where youth_id = ${me.id}`),
+    loadAway([me.id]).then((m) => m.get(me.id)),
+    one<{ display_name: string }>(sql`
+      select p.display_name from assignments a join profiles p on p.id = a.counselor_id where a.youth_id = ${me.id}`),
+    rows<{ title: string; until: string }>(sql`
+      select title, to_char(recruit_until, 'FMMM. FMDD.') as until from programs
+       where recruit_until >= current_date and min_stage <= ${myStage} + 1
+       order by recruit_until`),
+  ]);
   const weeks = splitWeeks(contacts.map((c) => new Date(c.occurred_at).toISOString()));
   const reactionCount = reaction?.n ?? 0;
 
@@ -39,6 +53,17 @@ export default async function YouthHome() {
       subtitle="오늘의 한 걸음만 하면 충분해요"
       right={<form action={logout}><SubmitButton className="text-xs text-sub underline">로그아웃</SubmitButton></form>}
     >
+      {away && (
+        <DoorCard
+          days={away.days}
+          mentorName={mentor?.display_name ?? null}
+          counselorName={counselor?.display_name ?? null}
+          nextProgram={fit[0] ?? null}
+          stage={myStage}
+          action={comeBack}
+        />
+      )}
+
       {!checkin ? (
         <Card tone="ai">
           <p className="mb-3 text-sm text-ink">지금 기분은 어느 쪽에 가까워요?</p>
@@ -63,6 +88,7 @@ export default async function YouthHome() {
       {stage?.proposed_stage != null && <StageProposal proposed={stage.proposed_stage} action={respondStage} />}
 
       <NavLink href="/youth/chat">선배와 주고받기</NavLink>
+      <RoomLink fitCount={fit.length} />
 
       <ContactWeeks lastWeek={weeks.lastWeek} thisWeek={weeks.thisWeek} target={target?.value ?? 3} reactions={reactionCount ?? 0} />
 
@@ -70,6 +96,8 @@ export default async function YouthHome() {
         <Label>나의 걸음</Label>
         <div className="mt-2"><StageLadder stage={stage?.stage ?? 0} /></div>
       </Card>
+
+      <PromiseCard afterDays={promise?.after_days ?? null} mentorName={mentorName} setAction={setPromise} dropAction={dropPromise} />
     </AppShell>
   );
 }

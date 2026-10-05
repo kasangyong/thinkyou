@@ -122,6 +122,36 @@ create table if not exists alerts (
   unique (crisis_event_id, level)
 );
 
+-- ───────────────────────── 상시 대기실 · 재연결 약속 ─────────────────────────
+-- 앱(src/lib/migrate.ts)이 처음 요청 때 같은 문장을 실행하고 시연용 예시 공고를 채운다.
+create table if not exists programs (
+  id text primary key,
+  min_stage integer not null,
+  title text not null,
+  org text not null,
+  summary text not null,
+  recruit_until date not null,
+  starts_on date not null
+);
+
+create table if not exists applications (
+  id uuid primary key default gen_random_uuid(),
+  youth_id uuid not null references profiles(id) on delete cascade,
+  program_id text not null references programs(id),
+  draft text not null,
+  status text not null default 'draft' check (status in ('draft','sent')),   -- 보내기는 본인만
+  created_at timestamptz not null default now(),
+  sent_at timestamptz,
+  unique (youth_id, program_id)
+);
+
+create table if not exists reconnect_promises (
+  youth_id uuid primary key references profiles(id) on delete cascade,
+  after_days integer not null check (after_days in (14, 30)),   -- 본인이 고른 기간
+  agreed_at timestamptz not null default now(),
+  returned_at timestamptz
+);
+
 -- ───────────────────────── 양방향 접촉 판정 ─────────────────────────
 -- 직전 메시지의 발신자가 상대방이고 응답 인정 시간 안이면 1쌍. 연속 메시지·이모지는 쌍이 아니다.
 create or replace function on_message_insert() returns trigger

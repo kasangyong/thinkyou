@@ -98,3 +98,48 @@ export async function suggestStep(input: {
     return fallback;
   }
 }
+
+// ───────── 상시 대기실: 지원서 초안 ─────────
+// 근거는 완료한 걸음과 접촉 횟수뿐이다. 대화 내용·위기 기록은 넘기지 않는다. 보낼지는 본인이 정한다.
+const DRAFT_SYSTEM = `너는 고립·은둔 경험이 있는 청년이 프로그램에 지원할 때 쓸 지원서 초안을 돕는다.
+- 청년 본인의 1인칭, 담백한 존댓말로 250~350자.
+- 주어진 걸음 기록과 접촉 횟수만 근거로 쓴다. 없는 경험을 지어내지 않는다.
+- 진단명, 병명, '은둔', '고립' 같은 낙인이 될 수 있는 단어를 쓰지 않는다. 본인이 직접 덧붙일 수 있게 둔다.
+- 과장, 다짐, 감탄사 없이. 마지막 문장은 이 프로그램에서 해 보고 싶은 작은 일 하나.`;
+
+export async function draftApplication(input: {
+  program: { title: string; org: string; summary: string };
+  doneSteps: string[];
+  contacts4w: number;
+}): Promise<string> {
+  const steps = input.doneSteps.slice(0, 3);
+  const fallback = [
+    `${input.program.title}에 지원합니다.`,
+    steps.length ? `최근에는 ${steps.join(", ")} 같은 작은 걸음을 하루에 하나씩 해 왔습니다.` : "최근 하루에 한 걸음씩 작은 일을 해 보고 있습니다.",
+    input.contacts4w ? `지난 4주 동안 선배와 ${input.contacts4w}번 글을 주고받으며 사람과 이야기하는 일에 조금씩 익숙해지고 있습니다.` : "",
+    "처음이라 서툴 수 있지만, 정해진 시간에 맞춰 참여해 보고 싶습니다.",
+  ].filter(Boolean).join(" ");
+  const g = ai();
+  if (!g) return fallback;
+  const prompt = [
+    `프로그램: ${input.program.title} (${input.program.org})`,
+    `프로그램 설명: ${input.program.summary}`,
+    `최근 완료한 걸음: ${input.doneSteps.join(" / ") || "없음"}`,
+    `지난 4주 선배와 주고받은 횟수: ${input.contacts4w}`,
+  ].join("\n");
+  try {
+    const res = await g.models.generateContent({
+      model: process.env.GEMINI_MODEL || "gemini-flash-latest",
+      contents: prompt,
+      config: {
+        systemInstruction: DRAFT_SYSTEM,
+        responseMimeType: "application/json",
+        responseJsonSchema: { type: "object", properties: { draft: { type: "string" } }, required: ["draft"] },
+      },
+    });
+    const draft = (JSON.parse(res.text ?? "{}") as { draft?: string }).draft?.trim();
+    return draft && draft.length >= 80 && draft.length <= 600 ? draft : fallback;
+  } catch {
+    return fallback;
+  }
+}

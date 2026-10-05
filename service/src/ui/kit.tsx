@@ -296,7 +296,8 @@ export function AlertItem(props: { alert: AlertView; ackAction: (fd: FormData) =
   );
 }
 
-export type YouthRow = { id: string; name: string; stage: number; proposed: number | null; contacts14d: number; href?: string };
+// awayDays: 재연결 약속 기간을 넘겨 소식이 없는 날 수(없으면 undefined)
+export type YouthRow = { id: string; name: string; stage: number; proposed: number | null; contacts14d: number; href?: string; awayDays?: number };
 
 export function YouthTable(props: { rows: YouthRow[] }) {
   return (
@@ -308,6 +309,11 @@ export function YouthTable(props: { rows: YouthRow[] }) {
             <span className="text-xs text-sub">
               {r.stage}단계{r.proposed !== null ? ` → ${r.proposed}단계 제안 중` : ""} · 최근 2주 접촉 {r.contacts14d}회
             </span>
+            {r.awayDays !== undefined && (
+              <span className="mt-1 rounded-lg bg-person-soft px-2 py-1 text-xs font-semibold text-ink">
+                약속한 재연결 · {r.awayDays}일째 소식 없음 · 먼저 짧게 연락해 주세요
+              </span>
+            )}
           </>
         );
         return (
@@ -321,5 +327,143 @@ export function YouthTable(props: { rows: YouthRow[] }) {
         );
       })}
     </ul>
+  );
+}
+
+// ───────── 상시 대기실 ─────────
+export function DemoNotice() {
+  return <p className="rounded-xl bg-white px-3 py-2 text-xs text-sub ring-1 ring-line">시연용 예시 공고예요. 실제 기관에 전달되지 않아요.</p>;
+}
+
+export function RoomLink(props: { fitCount: number }) {
+  return (
+    <Link href="/youth/room" className="flex items-center justify-between rounded-2xl border border-line bg-white p-4">
+      <span>
+        <span className="block text-sm font-semibold text-ink">프로그램 대기실</span>
+        <span className="text-xs text-sub">
+          {props.fitCount ? `지금 단계에 맞는 모집 ${props.fitCount}건` : "지금 단계에 맞는 모집은 아직 없어요"}
+        </span>
+      </span>
+      <span aria-hidden="true" className="text-sub">›</span>
+    </Link>
+  );
+}
+
+export type ProgramView = {
+  id: string;
+  title: string;
+  org: string;
+  summary: string;
+  until: string;
+  startsOn: string;
+  minStage: number;
+  fit: boolean;
+  status: "none" | "draft" | "sent";
+};
+
+const APP_STATUS = { none: "", draft: "초안 있음", sent: "보냄" } as const;
+
+export function ProgramItem(props: { program: ProgramView }) {
+  const p = props.program;
+  const body = (
+    <>
+      <span className="flex items-center justify-between gap-2">
+        <span className="font-semibold text-ink">{p.title}</span>
+        {p.status !== "none" && (
+          <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs ${p.status === "sent" ? "bg-ink text-white" : "bg-ai-soft text-ink"}`}>
+            {APP_STATUS[p.status]}
+          </span>
+        )}
+      </span>
+      <span className="text-xs text-sub">{p.org} · 모집 {p.until}까지 · {p.startsOn} 시작</span>
+      <span className="text-sm text-ink">{p.summary}</span>
+      {!p.fit && p.status === "none" && <span className="text-xs text-sub">{p.minStage}단계부터 지원할 수 있어요</span>}
+    </>
+  );
+  return p.fit || p.status !== "none" ? (
+    <Link href={`/youth/room/${p.id}`} className="flex flex-col gap-1 rounded-2xl border border-line bg-white p-4">{body}</Link>
+  ) : (
+    <div className="flex flex-col gap-1 rounded-2xl border border-line bg-white/60 p-4 opacity-60">{body}</div>
+  );
+}
+
+// ───────── 재연결 약속 ─────────
+export function PromiseCard(props: {
+  afterDays: number | null;
+  mentorName: string;
+  setAction: (fd: FormData) => Promise<void>;
+  dropAction: () => Promise<void>;
+}) {
+  if (props.afterDays) {
+    return (
+      <Card>
+        <Label>재연결 약속</Label>
+        <p className="mt-1 text-sm text-ink">
+          {props.afterDays === 14 ? "2주" : "한 달"} 동안 소식이 없으면 {props.mentorName} 님과 담당 상담사가 먼저 연락하고,
+          다시 들어왔을 때 돌아올 문을 보여 드려요.
+        </p>
+        <form action={props.dropAction} className="mt-2"><GhostButton>약속 거두기</GhostButton></form>
+      </Card>
+    );
+  }
+  return (
+    <Card>
+      <Label>재연결 약속</Label>
+      <p className="mb-3 mt-1 text-sm text-ink">한동안 못 들어와도 괜찮아요. 연락이 끊기면 언제 먼저 연락할까요?</p>
+      <form action={props.setAction} className="grid grid-cols-2 gap-2">
+        <SubmitButton name="days" value="14" className="rounded-xl border border-line bg-white px-4 py-2.5 text-sm text-ink">2주 뒤</SubmitButton>
+        <SubmitButton name="days" value="30" className="rounded-xl border border-line bg-white px-4 py-2.5 text-sm text-ink">한 달 뒤</SubmitButton>
+      </form>
+      <p className="mt-2 text-xs text-sub">약속하지 않아도 앱은 그대로 쓸 수 있어요. 언제든 거둘 수 있어요.</p>
+    </Card>
+  );
+}
+
+// 약속한 기간을 넘겨 돌아왔을 때 맨 위에 보이는 카드: 담당자, 다음 모집, 다시 시작할 단계
+export function DoorCard(props: {
+  days: number;
+  mentorName: string | null;
+  counselorName: string | null;
+  nextProgram: { title: string; until: string } | null;
+  stage: number;
+  action: (fd: FormData) => Promise<void>;
+}) {
+  const canLower = props.stage > 1;
+  const people = [props.mentorName && `${props.mentorName} 선배`, props.counselorName].filter(Boolean).join(" · ");
+  return (
+    <Card tone="ai">
+      <Label>돌아올 문</Label>
+      <p className="mt-1 font-display text-lg text-ink">{props.days}일 만이에요. 다시 와 줘서 반가워요.</p>
+      <ul className="mt-3 flex flex-col gap-2 text-sm text-ink">
+        <li className="rounded-xl bg-white/70 px-3 py-2">
+          <span className="block text-xs text-sub">담당자</span>
+          {people || "담당자를 연결하고 있어요."}{" "}
+          <Link href="/youth/chat" className="font-semibold underline">선배에게 한 줄 남기기</Link>
+        </li>
+        <li className="rounded-xl bg-white/70 px-3 py-2">
+          <span className="block text-xs text-sub">다음 모집</span>
+          {props.nextProgram ? (
+            <>
+              {props.nextProgram.title} · {props.nextProgram.until}까지.{" "}
+              <Link href="/youth/room" className="font-semibold underline">대기실 보기</Link>
+            </>
+          ) : (
+            "지금 단계에 맞는 모집은 아직 없어요"
+          )}
+        </li>
+        <li className="rounded-xl bg-white/70 px-3 py-2">
+          <span className="block text-xs text-sub">다시 시작할 단계</span>
+          {canLower ? `${props.stage}단계 그대로 가도 되고, ${props.stage - 1}단계로 한 칸 내려와 시작해도 돼요.` : `${props.stage}단계에서 다시 시작해요.`}
+        </li>
+      </ul>
+      <form action={props.action} className={`mt-3 grid gap-2 ${canLower ? "grid-cols-2" : ""}`}>
+        <PrimaryButton name="lower" value="no">{canLower ? `${props.stage}단계로 시작` : "다시 시작하기"}</PrimaryButton>
+        {canLower && (
+          <SubmitButton name="lower" value="yes" className="rounded-xl bg-white px-4 py-3 text-sm text-ink">
+            {props.stage - 1}단계로 시작
+          </SubmitButton>
+        )}
+      </form>
+    </Card>
   );
 }

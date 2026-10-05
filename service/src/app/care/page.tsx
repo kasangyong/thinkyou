@@ -50,9 +50,19 @@ export default async function CarePage() {
   }));
 
   let youths: Awaited<ReturnType<typeof loadYouthRows>> = [];
+  let sent: { id: string; display_name: string; title: string; org: string; draft: string; sent_at: string }[] = [];
   if (role === "counselor") {
     const mine = await rows<{ youth_id: string }>(sql`select youth_id from assignments where counselor_id = ${me.id}`);
     youths = await loadYouthRows(mine.map((r) => r.youth_id));
+    // 청년이 직접 보낸 지원서. 기관 전달은 상담사가 맡는다
+    sent = await rows(sql`
+      select a.id, p.display_name, g.title, g.org, a.draft, a.sent_at
+        from applications a
+        join assignments s on s.youth_id = a.youth_id and s.counselor_id = ${me.id}
+        join profiles p on p.id = a.youth_id
+        join programs g on g.id = a.program_id
+       where a.status = 'sent'
+       order by a.sent_at desc limit 20`);
   }
   const open = views.filter((v) => !v.acked && !v.handledElsewhere).length;
 
@@ -73,6 +83,24 @@ export default async function CarePage() {
         <>
           <Label>담당 청년</Label>
           <YouthTable rows={youths} />
+          {sent.length > 0 && (
+            <>
+              <Label>청년이 보낸 지원서</Label>
+              <ul className="flex flex-col gap-2">
+                {sent.map((a) => (
+                  <li key={a.id}>
+                    <details className="rounded-2xl border border-line bg-white p-4">
+                      <summary className="cursor-pointer text-sm">
+                        <span className="font-semibold text-ink">{a.display_name}</span> · {a.title}
+                        <span className="block text-xs text-sub">{a.org} · {kstTime(a.sent_at)} 보냄 · 기관 전달 대기</span>
+                      </summary>
+                      <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-ink">{a.draft}</p>
+                    </details>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
           <Card>
             <Label>시연 도구 (내 세트만)</Label>
             <div className="mt-2 flex flex-col gap-2">
@@ -81,6 +109,8 @@ export default async function CarePage() {
                 <SubmitButton className="w-full rounded-xl border border-line bg-white py-2 text-sm">처음 상태 (1단계, 선배 첫 글)</SubmitButton></form>
               <form action={resetDemo}><input type="hidden" name="mode" value="four_weeks" />
                 <SubmitButton className="w-full rounded-xl border border-line bg-white py-2 text-sm">4주 뒤 상태 (2단계, 2주간 꾸준히 주고받음)</SubmitButton></form>
+              <form action={resetDemo}><input type="hidden" name="mode" value="away" />
+                <SubmitButton className="w-full rounded-xl border border-line bg-white py-2 text-sm">3주 소식 없음 (2주 재연결 약속)</SubmitButton></form>
             </div>
           </Card>
         </>
