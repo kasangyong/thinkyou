@@ -196,8 +196,8 @@ export async function geminiHealth() {
 // ───────── AI와 이야기하기 ─────────
 // 붙잡지 않는 대화: 짧게 받아 주고, 단계가 오를수록 선배 쪽으로 돌려보낸다
 const CHAT_SYSTEM = `너는 고립·은둔 청년의 회복 앱 '오늘한걸음'의 AI다. 너의 목표는 대화를 오래 끄는 것이 아니라 청년이 사람(회복 선배)에게 돌아가게 돕는 것이다.
-- 한국어 존댓말, 2문장 이내, 80자 안팎.
-- 첫 문장은 들은 내용을 짧게 받아 주기. 두 번째 문장은 아주 작은 질문이나 5분짜리 걸음 하나.
+- 한국어 존댓말. 길이는 아래 '이번 단계의 답 길이'를 지킨다.
+- 들은 내용을 짧게 받아 준 뒤, 아주 작은 질문이나 5분짜리 걸음 하나를 건넨다.
 - 진단, 병명, 의학적 조언, 훈계, 과한 감탄을 쓰지 않는다. 네가 친구나 사람을 대신한다고 말하지 않는다.
 - 위험해 보이는 말이 있으면 109(24시간 자살예방상담)를 안내한다.`;
 
@@ -207,21 +207,30 @@ const CHAT_FALLBACK = [
   "천천히 해도 돼요. 오늘 한 걸음은 이미 충분히 작아요.",
 ];
 
+// 막지 않고 물러난다: 대화 횟수는 제한하지 않고, 단계가 오를수록 답이 짧아지며 사람 쪽으로 이어 준다
+const CHAT_STAGE = [
+  "2문장, 80자 안팎. 충분히 받아 준다.",
+  "2문장, 70자 안팎. 자연스러우면 선배의 글을 읽어 보자고 권한다.",
+  "2문장, 60자 안팎. 끝은 이 이야기를 선배에게도 한 줄 해 보자는 권유로 맺는다.",
+  "1문장, 50자 안팎. 끝은 선배나 모임 사람에게 이야기해 보자는 권유로 맺는다.",
+  "1문장, 40자 안팎. 끝은 선배·기관 담당자처럼 실제 사람에게 이어지게 맺는다.",
+];
+
 export async function aiReply(input: {
   history: { role: "youth" | "ai"; body: string }[];
   stage: number;
   mentorName: string;
-  remaining: number;
 }): Promise<string> {
-  const fallback = input.remaining <= 0
-    ? `오늘 이야기는 여기까지 할게요. ${input.mentorName} 님에게 한 줄 남겨 볼래요?`
+  const stage = Math.min(Math.max(input.stage, 0), 4);
+  const fallback = stage >= 2
+    ? `그랬군요. 이 이야기, ${input.mentorName} 님에게도 한 줄 해 볼래요?`
     : CHAT_FALLBACK[input.history.length % CHAT_FALLBACK.length];
   const g = ai();
   if (!g) return fallback;
   const guide = [
-    `현재 회복 단계: ${input.stage} (0~4, 높을수록 사람과 바깥으로)`,
-    input.stage >= 1 ? `담당 회복 선배 이름: ${input.mentorName}. 자연스러우면 이 이야기를 선배에게도 한 줄 해 보자고 권한다.` : "",
-    input.remaining <= 0 ? `오늘 AI와 나눌 대화는 이번이 마지막이다. 따뜻하게 마무리하고 ${input.mentorName} 님에게 한 줄 남겨 보라고 권한다.` : `오늘 남은 대화 횟수: ${input.remaining}`,
+    `현재 회복 단계: ${stage} (0~4, 높을수록 사람과 바깥으로)`,
+    `이번 단계의 답 길이: ${CHAT_STAGE[stage]}`,
+    stage >= 1 ? `담당 회복 선배 이름: ${input.mentorName}` : "",
   ].filter(Boolean).join("\n");
   // 잘라 온 기록이 AI 답으로 시작하면 버린다(대화는 사용자 차례로 시작해야 한다)
   const firstYouth = input.history.findIndex((m) => m.role === "youth");

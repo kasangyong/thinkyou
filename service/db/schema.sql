@@ -153,7 +153,7 @@ create table if not exists reconnect_promises (
 );
 
 -- AI와 이야기하기. 내용은 청년 본인만 본다(상담사 화면에는 횟수만)
--- crisis: 위기로 감지된 글과 그 안내. 하루 횟수에서 빼고 Gemini에도 보내지 않는다
+-- crisis: 위기로 감지된 글과 그 안내. 이번 주 대화 막대에서 빼고 Gemini에도 보내지 않는다
 create table if not exists ai_messages (
   id uuid primary key default gen_random_uuid(),
   youth_id uuid not null references profiles(id) on delete cascade,

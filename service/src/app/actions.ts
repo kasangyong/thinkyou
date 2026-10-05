@@ -10,7 +10,6 @@ import { kstDay } from "@/lib/format";
 import { aiReply, draftApplication, suggestStep, type Feedback, type Mood, type StepSize } from "@/lib/gemini";
 import { ensureMigrations } from "@/lib/migrate";
 import { loadAway } from "@/lib/reconnect";
-import { aiLimit, aiUsedToday } from "@/lib/ai-chat";
 
 // 오류가 나도 입력값(비밀번호 제외)을 돌려줘서 다시 채워 준다
 export type FormState = { error?: string; values?: Record<string, string> } | undefined;
@@ -286,7 +285,7 @@ export async function comeBack(formData: FormData) {
 }
 
 // ───────── AI와 이야기하기 ─────────
-// 하루 횟수를 다 써도 위기 감지는 항상 동작한다
+// 대화는 막지 않는다. 위기 글은 AI가 답하지 않고 사람(109·담당자)에게 연결한다
 export async function sendAi(formData: FormData) {
   const me = await requireRole(["youth"]);
   await ensureMigrations();
@@ -303,22 +302,19 @@ export async function sendAi(formData: FormData) {
     redirect("/youth/ai?crisis=1");
   }
 
-  const [st, used, mentor] = await Promise.all([
+  const [st, mentor] = await Promise.all([
     one<{ stage: number }>(sql`select stage from stage_state where youth_id = ${me.id}`),
-    aiUsedToday(me.id),
     one<{ display_name: string }>(sql`
       select p.display_name from assignments a join profiles p on p.id = a.mentor_id where a.youth_id = ${me.id}`),
   ]);
   const stage = st?.stage ?? 0;
-  const limit = aiLimit(stage);
-  if (used >= limit) return;
 
   await sql`insert into ai_messages(youth_id, role, body) values (${me.id}, 'youth', ${body})`;
   const recent = await rows<{ role: "youth" | "ai"; body: string }>(sql`
     select role, body from (
       select role, body, created_at from ai_messages where youth_id = ${me.id} and not crisis order by created_at desc limit 10
     ) t order by created_at`);
-  const reply = await aiReply({ history: recent, stage, mentorName: mentor?.display_name ?? "선배", remaining: limit - used - 1 });
+  const reply = await aiReply({ history: recent, stage, mentorName: mentor?.display_name ?? "선배" });
   await sql`insert into ai_messages(youth_id, role, body) values (${me.id}, 'ai', ${reply})`;
   revalidatePath("/youth/ai");
   revalidatePath("/youth");

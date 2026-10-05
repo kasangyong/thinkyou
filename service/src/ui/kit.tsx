@@ -473,18 +473,45 @@ export function DoorCard(props: {
 }
 
 // ───────── AI와 이야기하기 ─────────
-export function AiLink(props: { remaining: number; limit: number }) {
+// 이번 주 내가 말을 건 곳: 사람(선배) 대 AI. 사람 쪽이 커지는 것이 회복의 모습이다
+export function TalkBalance(props: { person: number; ai: number; mentorName: string }) {
+  const total = props.person + props.ai;
+  const personPct = total ? Math.round((props.person / total) * 100) : 0;
+  // 담당 선배가 없으면 이름 대신 "선배"로 쓴다
+  const who = props.mentorName === "선배" ? "선배" : `${props.mentorName} 님`;
   return (
-    <Link href="/youth/ai" className="flex items-center justify-between rounded-2xl bg-ai-soft p-4">
-      <span>
-        <span className="block text-sm font-semibold text-ink">AI와 이야기하기</span>
-        <span className="text-xs text-sub">오늘 {props.remaining}번 남았어요 · 단계가 오를수록 줄어들어요</span>
+    <div>
+      <div aria-hidden="true" className="flex justify-between text-xs text-sub">
+        <span>{who}에게 {props.person}번</span>
+        <span>AI에게 {props.ai}번</span>
+      </div>
+      <div
+        className="mt-1 flex h-2.5 overflow-hidden rounded-full bg-white"
+        role="img"
+        aria-label={`이번 주 ${who}에게 ${props.person}번, AI에게 ${props.ai}번 말을 걸었어요`}
+      >
+        {total > 0 && (
+          <>
+            <span className="bg-person" style={{ width: `${personPct}%` }} />
+            <span className="bg-ai" style={{ width: `${100 - personPct}%` }} />
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function AiLink(props: { person: number; ai: number; mentorName: string }) {
+  return (
+    <Link href="/youth/ai" className="flex flex-col gap-2 rounded-2xl bg-ai-soft p-4">
+      <span className="flex items-center justify-between">
+        <span>
+          <span className="block text-sm font-semibold text-ink">AI와 이야기하기</span>
+          <span className="text-xs text-sub">언제든 말 걸어도 돼요 · 이번 주 내가 말을 건 곳</span>
+        </span>
+        <span aria-hidden="true" className="text-sub">›</span>
       </span>
-      <span aria-hidden="true" className="flex gap-1">
-        {Array.from({ length: props.limit }, (_, i) => (
-          <span key={i} className={`inline-block size-2 rounded-full ${i < props.remaining ? "bg-ai" : "bg-white"}`} />
-        ))}
-      </span>
+      <TalkBalance person={props.person} ai={props.ai} mentorName={props.mentorName} />
     </Link>
   );
 }
