@@ -47,6 +47,12 @@ const SYSTEM = `너는 고립·은둔 청년의 회복 루틴 앱 '오늘한걸�
 - 최근 걸음과 같은 행동은 피한다.
 - 진단, 의학적 조언, 훈계, 감탄사를 쓰지 않는다. 행동만 쓴다.`;
 
+// 실패하면 기본 문장으로 넘어가므로 화면에서는 티가 나지 않는다. 원인은 서버 로그로만 남긴다(키·입력 내용 제외)
+function logFailure(where: string, e: unknown) {
+  const status = (e as { status?: number }).status;
+  console.warn(`[gemini] ${where} failed`, status ?? "", e instanceof Error ? e.message.slice(0, 200) : "");
+}
+
 let client: GoogleGenAI | null = null;
 function ai() {
   if (!process.env.GEMINI_API_KEY) return null;
@@ -94,7 +100,8 @@ export async function suggestStep(input: {
     });
     const step = (JSON.parse(res.text ?? "{}") as { step?: string }).step?.trim();
     return step && step.length <= 40 && step !== input.current ? step : fallback;
-  } catch {
+  } catch (e) {
+    logFailure("suggestStep", e);
     return fallback;
   }
 }
@@ -139,7 +146,29 @@ export async function draftApplication(input: {
     });
     const draft = (JSON.parse(res.text ?? "{}") as { draft?: string }).draft?.trim();
     return draft && draft.length >= 80 && draft.length <= 600 ? draft : fallback;
-  } catch {
+  } catch (e) {
+    logFailure("draftApplication", e);
     return fallback;
   }
+}
+
+// 연결 점검: 운영에서 로그인 없이 Gemini가 실제로 응답하는지 확인한다. 호출 비용을 막으려고 10분간 결과를 재사용한다
+let health: { at: number; result: { configured: boolean; ok: boolean; model: string; ms?: number; status?: number } } | null = null;
+export async function geminiHealth() {
+  if (health && Date.now() - health.at < 10 * 60_000) return { ...health.result, cached: true };
+  const model = process.env.GEMINI_MODEL || "gemini-flash-latest";
+  const g = ai();
+  let result: { configured: boolean; ok: boolean; model: string; ms?: number; status?: number } = { configured: !!g, ok: false, model };
+  if (g) {
+    const t = Date.now();
+    try {
+      const res = await g.models.generateContent({ model, contents: "ok 라고만 답해" });
+      result = { ...result, ok: !!res.text?.trim(), ms: Date.now() - t };
+    } catch (e) {
+      logFailure("health", e);
+      result = { ...result, ms: Date.now() - t, status: (e as { status?: number }).status };
+    }
+  }
+  health = { at: Date.now(), result };
+  return { ...result, cached: false };
 }
