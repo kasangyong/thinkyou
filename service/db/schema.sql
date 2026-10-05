@@ -152,6 +152,17 @@ create table if not exists reconnect_promises (
   returned_at timestamptz
 );
 
+-- AI와 이야기하기. 내용은 청년 본인만 본다(상담사 화면에는 횟수만)
+-- crisis: 위기로 감지된 글과 그 안내. 하루 횟수에서 빼고 Gemini에도 보내지 않는다
+create table if not exists ai_messages (
+  id uuid primary key default gen_random_uuid(),
+  youth_id uuid not null references profiles(id) on delete cascade,
+  role text not null check (role in ('youth','ai')),
+  body text not null,
+  crisis boolean not null default false,
+  created_at timestamptz not null default now()
+);
+
 -- ───────────────────────── 양방향 접촉 판정 ─────────────────────────
 -- 직전 메시지의 발신자가 상대방이고 응답 인정 시간 안이면 1쌍. 연속 메시지·이모지는 쌍이 아니다.
 create or replace function on_message_insert() returns trigger

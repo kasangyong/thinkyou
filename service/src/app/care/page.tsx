@@ -12,6 +12,7 @@ const TITLE = { counselor: "담당 상담사", backup: "예비 담당자", crisi
 
 type AlertRow = {
   id: string;
+  youth_id: string;
   level: AlertView["level"];
   acked_at: string | null;
   created_at: string;
@@ -30,7 +31,7 @@ export default async function CarePage() {
   await sql`select escalate_alerts()`;
 
   const alerts = await rows<AlertRow>(sql`
-    select al.id, al.level, al.acked_at, al.created_at, p.display_name, e.excerpt, e.severity,
+    select al.id, al.level, al.acked_at, al.created_at, al.youth_id, p.display_name, e.excerpt, e.severity,
            exists (select 1 from alerts x where x.crisis_event_id = al.crisis_event_id
                      and x.id <> al.id and x.acked_at is not null) as handled_elsewhere
       from alerts al
@@ -47,13 +48,14 @@ export default async function CarePage() {
     createdAt: kstTime(a.created_at),
     acked: !!a.acked_at,
     handledElsewhere: a.handled_elsewhere,
+    youthHref: `/care/${a.youth_id}`,
   }));
 
   let youths: Awaited<ReturnType<typeof loadYouthRows>> = [];
   let sent: { id: string; display_name: string; title: string; org: string; draft: string; sent_at: string }[] = [];
   if (role === "counselor") {
     const mine = await rows<{ youth_id: string }>(sql`select youth_id from assignments where counselor_id = ${me.id}`);
-    youths = await loadYouthRows(mine.map((r) => r.youth_id));
+    youths = await loadYouthRows(mine.map((r) => r.youth_id), (id) => `/care/${id}`);
     // 청년이 직접 보낸 지원서. 기관 전달은 상담사가 맡는다
     sent = await rows(sql`
       select a.id, p.display_name, g.title, g.org, a.draft, a.sent_at

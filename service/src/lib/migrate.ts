@@ -56,6 +56,16 @@ export function ensureMigrations() {
         agreed_at timestamptz not null default now(),
         returned_at timestamptz
       )`);
+    await ddl(sql`
+      create table if not exists ai_messages (
+        id uuid primary key default gen_random_uuid(),
+        youth_id uuid not null references profiles(id) on delete cascade,
+        role text not null check (role in ('youth','ai')),
+        body text not null,
+        crisis boolean not null default false,
+        created_at timestamptz not null default now()
+      )`);
+    await ddl(sql`alter table ai_messages add column if not exists crisis boolean not null default false`);
     for (const p of PROGRAMS) {
       await sql`
         insert into programs(id, min_stage, title, org, summary, recruit_until, starts_on)

@@ -266,6 +266,7 @@ export type AlertView = {
   createdAt: string;
   acked: boolean;
   handledElsewhere?: boolean;
+  youthHref?: string;
 };
 
 const LEVEL_KO = { primary: "담당 상담사", backup: "예비 담당자(재전달)", emergency: "24시간 위기대응팀(시뮬레이션)" };
@@ -280,7 +281,10 @@ export function AlertItem(props: { alert: AlertView; ackAction: (fd: FormData) =
         </span>
         <span className="text-sub">{LEVEL_KO[a.level]} · {a.createdAt}</span>
       </div>
-      <p className="mt-2 text-sm font-semibold text-ink">{a.youthName}</p>
+      <p className="mt-2 text-sm font-semibold text-ink">
+        {a.youthName}
+        {a.youthHref && <Link href={a.youthHref} className="ml-2 text-xs font-normal text-sub underline">청년 기록 보기</Link>}
+      </p>
       <p className="mt-1 text-sm text-ink">“{a.excerpt}”</p>
       {a.acked ? (
         <p className="mt-2 text-xs text-sub">확인함</p>
@@ -465,5 +469,22 @@ export function DoorCard(props: {
         )}
       </form>
     </Card>
+  );
+}
+
+// ───────── AI와 이야기하기 ─────────
+export function AiLink(props: { remaining: number; limit: number }) {
+  return (
+    <Link href="/youth/ai" className="flex items-center justify-between rounded-2xl bg-ai-soft p-4">
+      <span>
+        <span className="block text-sm font-semibold text-ink">AI와 이야기하기</span>
+        <span className="text-xs text-sub">오늘 {props.remaining}번 남았어요 · 단계가 오를수록 줄어들어요</span>
+      </span>
+      <span aria-hidden="true" className="flex gap-1">
+        {Array.from({ length: props.limit }, (_, i) => (
+          <span key={i} className={`inline-block size-2 rounded-full ${i < props.remaining ? "bg-ai" : "bg-white"}`} />
+        ))}
+      </span>
+    </Link>
   );
 }

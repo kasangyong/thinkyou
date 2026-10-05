@@ -2,10 +2,11 @@ import { redirect } from "next/navigation";
 import { getMe } from "@/lib/auth";
 import { one, rows, sql } from "@/lib/db";
 import { kstDay, splitWeeks } from "@/lib/format";
-import { AppShell, Card, ContactWeeks, DoorCard, Label, MoodPicker, NavLink, PromiseCard, RoomLink, StageLadder, StageProposal, StepCard, type MoodValue, type StepFeedback } from "@/ui/kit";
+import { AiLink, AppShell, Card, ContactWeeks, DoorCard, Label, MoodPicker, NavLink, PromiseCard, RoomLink, StageLadder, StageProposal, StepCard, type MoodValue, type StepFeedback } from "@/ui/kit";
 import { SubmitButton } from "@/ui/submit-button";
 import { checkIn, comeBack, completeStep, dropPromise, logout, respondStage, setPromise, smallerStep, stepFeedback } from "../actions";
 import { loadAway } from "@/lib/reconnect";
+import { aiLimit, aiUsedToday } from "@/lib/ai-chat";
 import { ensureMigrations } from "@/lib/migrate";
 
 export default async function YouthHome() {
@@ -34,7 +35,8 @@ export default async function YouthHome() {
 
   // 상시 대기실·재연결 약속
   const myStage = stage?.stage ?? 0;
-  const [promise, away, counselor, fit] = await Promise.all([
+  const aiMax = aiLimit(myStage);
+  const [promise, away, counselor, fit, aiUsed] = await Promise.all([
     one<{ after_days: number }>(sql`select after_days from reconnect_promises where youth_id = ${me.id}`),
     loadAway([me.id]).then((m) => m.get(me.id)),
     one<{ display_name: string }>(sql`
@@ -43,6 +45,7 @@ export default async function YouthHome() {
       select title, to_char(recruit_until, 'FMMM. FMDD.') as until from programs
        where recruit_until >= current_date and min_stage <= ${myStage} + 1
        order by recruit_until`),
+    aiUsedToday(me.id),
   ]);
   const weeks = splitWeeks(contacts.map((c) => new Date(c.occurred_at).toISOString()));
   const reactionCount = reaction?.n ?? 0;
@@ -88,6 +91,7 @@ export default async function YouthHome() {
       {stage?.proposed_stage != null && <StageProposal proposed={stage.proposed_stage} action={respondStage} />}
 
       <NavLink href="/youth/chat">선배와 주고받기</NavLink>
+      <AiLink remaining={Math.max(aiMax - aiUsed, 0)} limit={aiMax} />
       <RoomLink fitCount={fit.length} />
 
       <ContactWeeks lastWeek={weeks.lastWeek} thisWeek={weeks.thisWeek} target={target?.value ?? 3} reactions={reactionCount ?? 0} />

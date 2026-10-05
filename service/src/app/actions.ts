@@ -7,9 +7,10 @@ import { canUseThread, endSession, hashPassword, requireRole, startSession, veri
 import { detectCrisis } from "@/lib/crisis";
 import { ensureDemoAccounts } from "@/lib/demo";
 import { kstDay } from "@/lib/format";
-import { draftApplication, suggestStep, type Feedback, type Mood, type StepSize } from "@/lib/gemini";
+import { aiReply, draftApplication, suggestStep, type Feedback, type Mood, type StepSize } from "@/lib/gemini";
 import { ensureMigrations } from "@/lib/migrate";
 import { loadAway } from "@/lib/reconnect";
+import { aiLimit, aiUsedToday } from "@/lib/ai-chat";
 
 // 오류가 나도 입력값(비밀번호 제외)을 돌려줘서 다시 채워 준다
 export type FormState = { error?: string; values?: Record<string, string> } | undefined;
@@ -197,6 +198,7 @@ export async function resetDemo(formData: FormData) {
   const ids = youths.map((y) => y.id);
   await sql`delete from applications where youth_id = any(${ids}::uuid[])`;
   await sql`delete from reconnect_promises where youth_id = any(${ids}::uuid[])`;
+  await sql`delete from ai_messages where youth_id = any(${ids}::uuid[])`;
   await sql`select seed_youth_state(id, ${mode === "fresh" ? "fresh" : "four_weeks"}) from profiles where id = any(${ids}::uuid[])`;
   if (mode === "away") {
     await sql`update messages set created_at = created_at - interval '21 days' where youth_id = any(${ids}::uuid[])`;
@@ -281,4 +283,44 @@ export async function comeBack(formData: FormData) {
   }
   await sql`update reconnect_promises set returned_at = now() where youth_id = ${me.id}`;
   revalidatePath("/youth");
+}
+
+// ───────── AI와 이야기하기 ─────────
+// 하루 횟수를 다 써도 위기 감지는 항상 동작한다
+export async function sendAi(formData: FormData) {
+  const me = await requireRole(["youth"]);
+  await ensureMigrations();
+  const body = String(formData.get("body") ?? "").trim();
+  if (!body || body.length > 1000) return;
+
+  const severity = detectCrisis(body);
+  if (severity) {
+    await sql`insert into ai_messages(youth_id, role, body, crisis) values (${me.id}, 'youth', ${body}, true)`;
+    await sql`select raise_crisis(${me.id}, null, ${severity}, ${body})`;
+    await sql`insert into ai_messages(youth_id, role, body, crisis)
+              values (${me.id}, 'ai', '지금은 사람과 이야기하는 게 먼저예요. 109에 전화하면 바로 사람과 이어지고, 담당 상담사에게도 알렸어요.', true)`;
+    revalidatePath("/youth/ai");
+    redirect("/youth/ai?crisis=1");
+  }
+
+  const [st, used, mentor] = await Promise.all([
+    one<{ stage: number }>(sql`select stage from stage_state where youth_id = ${me.id}`),
+    aiUsedToday(me.id),
+    one<{ display_name: string }>(sql`
+      select p.display_name from assignments a join profiles p on p.id = a.mentor_id where a.youth_id = ${me.id}`),
+  ]);
+  const stage = st?.stage ?? 0;
+  const limit = aiLimit(stage);
+  if (used >= limit) return;
+
+  await sql`insert into ai_messages(youth_id, role, body) values (${me.id}, 'youth', ${body})`;
+  const recent = await rows<{ role: "youth" | "ai"; body: string }>(sql`
+    select role, body from (
+      select role, body, created_at from ai_messages where youth_id = ${me.id} and not crisis order by created_at desc limit 10
+    ) t order by created_at`);
+  const reply = await aiReply({ history: recent, stage, mentorName: mentor?.display_name ?? "선배", remaining: limit - used - 1 });
+  await sql`insert into ai_messages(youth_id, role, body) values (${me.id}, 'ai', ${reply})`;
+  revalidatePath("/youth/ai");
+  revalidatePath("/youth");
+  redirect("/youth/ai");
 }

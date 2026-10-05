@@ -192,3 +192,50 @@ export async function geminiHealth() {
   health = { at: Date.now(), result };
   return { ...result, cached: false };
 }
+
+// ───────── AI와 이야기하기 ─────────
+// 붙잡지 않는 대화: 짧게 받아 주고, 단계가 오를수록 선배 쪽으로 돌려보낸다
+const CHAT_SYSTEM = `너는 고립·은둔 청년의 회복 앱 '오늘한걸음'의 AI다. 너의 목표는 대화를 오래 끄는 것이 아니라 청년이 사람(회복 선배)에게 돌아가게 돕는 것이다.
+- 한국어 존댓말, 2문장 이내, 80자 안팎.
+- 첫 문장은 들은 내용을 짧게 받아 주기. 두 번째 문장은 아주 작은 질문이나 5분짜리 걸음 하나.
+- 진단, 병명, 의학적 조언, 훈계, 과한 감탄을 쓰지 않는다. 네가 친구나 사람을 대신한다고 말하지 않는다.
+- 위험해 보이는 말이 있으면 109(24시간 자살예방상담)를 안내한다.`;
+
+const CHAT_FALLBACK = [
+  "이야기해 줘서 고마워요. 오늘 커튼을 한 뼘만 열어 볼래요?",
+  "그랬군요. 지금 물 한 잔 마시고 다시 와도 괜찮아요.",
+  "천천히 해도 돼요. 오늘 한 걸음은 이미 충분히 작아요.",
+];
+
+export async function aiReply(input: {
+  history: { role: "youth" | "ai"; body: string }[];
+  stage: number;
+  mentorName: string;
+  remaining: number;
+}): Promise<string> {
+  const fallback = input.remaining <= 0
+    ? `오늘 이야기는 여기까지 할게요. ${input.mentorName} 님에게 한 줄 남겨 볼래요?`
+    : CHAT_FALLBACK[input.history.length % CHAT_FALLBACK.length];
+  const g = ai();
+  if (!g) return fallback;
+  const guide = [
+    `현재 회복 단계: ${input.stage} (0~4, 높을수록 사람과 바깥으로)`,
+    input.stage >= 1 ? `담당 회복 선배 이름: ${input.mentorName}. 자연스러우면 이 이야기를 선배에게도 한 줄 해 보자고 권한다.` : "",
+    input.remaining <= 0 ? `오늘 AI와 나눌 대화는 이번이 마지막이다. 따뜻하게 마무리하고 ${input.mentorName} 님에게 한 줄 남겨 보라고 권한다.` : `오늘 남은 대화 횟수: ${input.remaining}`,
+  ].filter(Boolean).join("\n");
+  // 잘라 온 기록이 AI 답으로 시작하면 버린다(대화는 사용자 차례로 시작해야 한다)
+  const firstYouth = input.history.findIndex((m) => m.role === "youth");
+  const history = firstYouth < 0 ? [] : input.history.slice(firstYouth);
+  if (history.length === 0) return fallback;
+  try {
+    const { res } = await generate(g, {
+      contents: history.map((m) => ({ role: m.role === "youth" ? "user" : "model", parts: [{ text: m.body }] })),
+      config: { systemInstruction: `${CHAT_SYSTEM}\n${guide}` },
+    });
+    const text = res.text?.trim();
+    return text && text.length <= 200 ? text : fallback;
+  } catch (e) {
+    logFailure("aiReply", e);
+    return fallback;
+  }
+}
