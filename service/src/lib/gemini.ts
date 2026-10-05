@@ -23,9 +23,17 @@ const FALLBACK: [string, string][] = [
   ["집 앞 편의점까지 걸어갔다 오기", "현관문 밖에서 1분 서 있기"],
 ];
 
-export function fallbackStep(stage: number, size: StepSize) {
+// 이미 작은 걸음인데 또 줄여 달라고 하면 단계와 상관없이 더 작은 것으로 내려간다
+const TINY = ["물 한 모금 마셔 보기", "자리에서 기지개 한 번 켜기", "숨을 세 번 천천히 쉬어 보기"];
+
+export function fallbackStep(stage: number, size: StepSize, current: string | null = null) {
   const row = FALLBACK[Math.min(Math.max(stage, 0), 4)];
-  return size === "small" ? row[1] : row[0];
+  if (size === "normal") return row[0];
+  // 지금 걸음보다 한 칸 아래로. 맨 아래에 닿으면 비슷한 크기의 다른 걸음으로 바꾼다
+  const ladder = [row[1], ...TINY];
+  const i = current ? ladder.indexOf(current) : -1;
+  if (i < 0) return ladder[0];
+  return i < ladder.length - 1 ? ladder[i + 1] : TINY[0];
 }
 
 const MOOD_KO: Record<Mood, string> = { hard: "힘듦", ok: "보통", good: "괜찮음" };
@@ -53,8 +61,9 @@ export async function suggestStep(input: {
   stage: number;
   recentSteps: string[];
   lastFeedback: Feedback | null;
+  current: string | null;
 }): Promise<string> {
-  const fallback = fallbackStep(input.stage, input.size);
+  const fallback = fallbackStep(input.stage, input.size, input.current);
   const g = ai();
   if (!g) return fallback;
   const stage = Math.min(Math.max(input.stage, 0), 4);
@@ -64,7 +73,9 @@ export async function suggestStep(input: {
     `이번 단계의 방향: ${STAGE_GOAL[stage]}`,
     `어제 걸음에 대한 본인 평가: ${input.lastFeedback ? FEEDBACK_KO[input.lastFeedback] : "없음"}`,
     `최근 걸음: ${input.recentSteps.join(" / ") || "없음"}`,
-    input.size === "small" ? "지금 걸음이 부담스럽다고 했다. 그보다 훨씬 작은 걸음을 제안해." : "",
+    input.size === "small" && input.current
+      ? `지금 걸음 "${input.current}"이 부담스럽다고 했다. 이것과 다른, 훨씬 작은 걸음을 제안해.`
+      : input.size === "small" ? "오늘은 부담이 적은 아주 작은 걸음을 제안해." : "",
   ].join("\n");
 
   try {
@@ -82,7 +93,7 @@ export async function suggestStep(input: {
       },
     });
     const step = (JSON.parse(res.text ?? "{}") as { step?: string }).step?.trim();
-    return step && step.length <= 40 ? step : fallback;
+    return step && step.length <= 40 && step !== input.current ? step : fallback;
   } catch {
     return fallback;
   }

@@ -81,8 +81,12 @@ export async function checkIn(formData: FormData) {
 
 export async function smallerStep() {
   const me = await requireRole(["youth"]);
-  const c = await one<{ mood: Mood }>(sql`select mood from checkins where youth_id = ${me.id} order by day desc limit 1`);
-  await makeStep(me.id, c?.mood ?? "ok", "small");
+  const [c, cur] = await Promise.all([
+    one<{ mood: Mood }>(sql`select mood from checkins where youth_id = ${me.id} order by day desc limit 1`),
+    one<{ text: string }>(sql`select text from daily_steps where youth_id = ${me.id} and day = ${kstDay()}`),
+  ]);
+  // 지금 걸음을 알려 줘야 그보다 작은 걸음이 나온다
+  await makeStep(me.id, c?.mood ?? "ok", "small", cur?.text ?? null);
   revalidatePath("/youth");
 }
 
@@ -93,7 +97,7 @@ export async function completeStep() {
   revalidatePath("/youth");
 }
 
-async function makeStep(youthId: string, mood: Mood, size: StepSize) {
+async function makeStep(youthId: string, mood: Mood, size: StepSize, current: string | null = null) {
   await ensureMigrations();
   const [st, recent, last] = await Promise.all([
     one<{ stage: number }>(sql`select stage from stage_state where youth_id = ${youthId}`),
@@ -111,6 +115,7 @@ async function makeStep(youthId: string, mood: Mood, size: StepSize) {
     stage: st?.stage ?? 0,
     recentSteps: recent.map((r) => r.text),
     lastFeedback: last?.feedback ?? null,
+    current,
   });
   await sql`insert into daily_steps(youth_id, day, text, size) values (${youthId}, ${kstDay()}, ${text}, ${size})
             on conflict (youth_id, day) do update set text = excluded.text, size = excluded.size, done_at = null`;
