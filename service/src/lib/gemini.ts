@@ -1,5 +1,5 @@
 import "server-only";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, type GenerateContentParameters } from "@google/genai";
 
 export type Mood = "hard" | "ok" | "good";
 export type StepSize = "normal" | "small";
@@ -56,8 +56,30 @@ function logFailure(where: string, e: unknown) {
 let client: GoogleGenAI | null = null;
 function ai() {
   if (!process.env.GEMINI_API_KEY) return null;
-  client ??= new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+  // 한 번 기다리는 시간을 8초로 묶는다. 늦으면 다음 모델이나 기본 문장으로 넘어간다
+  client ??= new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY, httpOptions: { timeout: 8000 } });
   return client;
+}
+
+// 모델이 붐비면(503·429 등) 다음 모델로 넘어간다. 지정한 모델 → 최신 flash → 최신 flash-lite 순
+function models() {
+  return [...new Set([process.env.GEMINI_MODEL, "gemini-flash-latest", "gemini-flash-lite-latest"].filter((m): m is string => !!m))];
+}
+
+async function generate(g: GoogleGenAI, params: Omit<GenerateContentParameters, "model">) {
+  let last: unknown;
+  for (const model of models()) {
+    try {
+      const res = await g.models.generateContent({ ...params, model });
+      return { res, model };
+    } catch (e) {
+      last = e;
+      const status = (e as { status?: number }).status;
+      // 요청 자체가 잘못된 경우(400·401·403)는 다른 모델로 바꿔도 같으니 바로 멈춘다
+      if (status && status >= 400 && status < 500 && status !== 404 && status !== 429) break;
+    }
+  }
+  throw last;
 }
 
 // 실패하면 기본 걸음을 돌려준다. AI가 멈춰도 하루 루틴은 멈추지 않는다.
@@ -85,8 +107,7 @@ export async function suggestStep(input: {
   ].join("\n");
 
   try {
-    const res = await g.models.generateContent({
-      model: process.env.GEMINI_MODEL || "gemini-flash-latest",
+    const { res } = await generate(g, {
       contents: prompt,
       config: {
         systemInstruction: SYSTEM,
@@ -135,8 +156,7 @@ export async function draftApplication(input: {
     `지난 4주 선배와 주고받은 횟수: ${input.contacts4w}`,
   ].join("\n");
   try {
-    const res = await g.models.generateContent({
-      model: process.env.GEMINI_MODEL || "gemini-flash-latest",
+    const { res } = await generate(g, {
       contents: prompt,
       config: {
         systemInstruction: DRAFT_SYSTEM,
@@ -153,17 +173,17 @@ export async function draftApplication(input: {
 }
 
 // 연결 점검: 운영에서 로그인 없이 Gemini가 실제로 응답하는지 확인한다. 호출 비용을 막으려고 10분간 결과를 재사용한다
-let health: { at: number; result: { configured: boolean; ok: boolean; model: string; ms?: number; status?: number } } | null = null;
+type Health = { configured: boolean; ok: boolean; model?: string; ms?: number; status?: number };
+let health: { at: number; result: Health } | null = null;
 export async function geminiHealth() {
   if (health && Date.now() - health.at < 10 * 60_000) return { ...health.result, cached: true };
-  const model = process.env.GEMINI_MODEL || "gemini-flash-latest";
   const g = ai();
-  let result: { configured: boolean; ok: boolean; model: string; ms?: number; status?: number } = { configured: !!g, ok: false, model };
+  let result: Health = { configured: !!g, ok: false };
   if (g) {
     const t = Date.now();
     try {
-      const res = await g.models.generateContent({ model, contents: "ok 라고만 답해" });
-      result = { ...result, ok: !!res.text?.trim(), ms: Date.now() - t };
+      const { res, model } = await generate(g, { contents: "ok 라고만 답해" });
+      result = { ...result, ok: !!res.text?.trim(), model, ms: Date.now() - t };
     } catch (e) {
       logFailure("health", e);
       result = { ...result, ms: Date.now() - t, status: (e as { status?: number }).status };
